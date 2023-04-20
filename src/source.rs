@@ -27,13 +27,14 @@ pub trait SourceStream:
     async fn seek(&mut self, position: u64);
 }
 
+#[derive(Debug, Clone)]
 pub struct SourceHandle {
     downloaded: Arc<RwLock<RangeSet<u64>>>,
     position: Arc<AtomicU64>,
     requested_position: Arc<AtomicI64>,
     position_reached: Arc<(Mutex<bool>, Condvar)>,
     content_length_retrieved: Arc<(Mutex<bool>, Condvar)>,
-    content_length: Arc<AtomicU64>,
+    content_length: Arc<AtomicI64>,
     seek_tx: mpsc::Sender<u64>,
 }
 
@@ -69,27 +70,31 @@ impl SourceHandle {
         if !*done {
             cvar.wait_while(&mut done, |done| !*done);
         }
-        Some(self.content_length.load(Ordering::SeqCst))
+        let length = self.content_length.load(Ordering::SeqCst);
+        if length > -1 {
+            Some(length as u64)
+        } else {
+            None
+        }
     }
 }
 
-pub struct Source<S: SourceStream> {
+pub struct Source {
     writer: BufWriter<File>,
     downloaded: Arc<RwLock<RangeSet<u64>>>,
     position: Arc<AtomicU64>,
     requested_position: Arc<AtomicI64>,
     position_reached: Arc<(Mutex<bool>, Condvar)>,
     content_length_retrieved: Arc<(Mutex<bool>, Condvar)>,
-    content_length: Arc<AtomicU64>,
+    content_length: Arc<AtomicI64>,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
-    url: S::Url,
 }
 
 const PREFETCH_BYTES: u64 = 1024 * 256;
 
-impl<S: SourceStream> Source<S> {
-    pub fn create(url: S::Url, tempfile: File) -> Self {
+impl Source {
+    pub fn new(tempfile: File) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
         Self {
             writer: BufWriter::new(tempfile),
@@ -101,16 +106,19 @@ impl<S: SourceStream> Source<S> {
             seek_tx,
             seek_rx,
             content_length: Default::default(),
-            url,
         }
     }
 
-    pub async fn download(mut self) {
+    pub async fn download<S: SourceStream>(mut self, mut stream: S) {
         info!("Starting file download");
-        let mut stream = S::create(self.url).await;
 
-        let content_length = stream.content_length().await.unwrap();
-        self.content_length.swap(content_length, Ordering::SeqCst);
+        let content_length = stream.content_length().await;
+        if let Some(content_length) = content_length {
+            self.content_length
+                .swap(content_length as i64, Ordering::SeqCst);
+        } else {
+            self.content_length.swap(-1, Ordering::SeqCst);
+        }
 
         {
             let (mutex, cvar) = &*self.content_length_retrieved;
@@ -130,6 +138,13 @@ impl<S: SourceStream> Source<S> {
                     break;
                 }
             } else {
+                info!("File shorter than prefetch length");
+                self.writer.flush().unwrap();
+                self.position.fetch_add(initial_buffer, Ordering::SeqCst);
+                self.downloaded.write().insert(0..initial_buffer);
+                let (mutex, cvar) = &*self.position_reached;
+                *mutex.lock() = true;
+                cvar.notify_all();
                 return;
             }
         }

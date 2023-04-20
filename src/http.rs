@@ -7,7 +7,7 @@ use std::{
     str::FromStr,
     task::{self, Poll},
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::source::SourceStream;
 
@@ -36,19 +36,20 @@ impl SourceStream for HttpStream {
         info!("Requesting content length");
         let response = client.get(url.as_str()).send().await.unwrap();
 
-        let content_length = response
-            .headers()
-            .get(reqwest::header::CONTENT_LENGTH)
-            .unwrap();
+        let mut content_length = None;
+        if let Some(length) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
+            let length = u64::from_str(length.to_str().unwrap()).unwrap();
+            info!("Got content length {length}");
+            content_length = Some(length);
+        } else {
+            warn!("Content length header missing");
+        }
 
-        let content_length = u64::from_str(content_length.to_str().unwrap()).unwrap();
-
-        info!("Got content length {content_length}");
         let stream = response.bytes_stream();
         Self {
             stream: Box::new(stream),
             client,
-            content_length: Some(content_length),
+            content_length,
             url,
         }
     }
@@ -63,7 +64,12 @@ impl SourceStream for HttpStream {
                 .get(self.url.as_str())
                 .header(
                     "Range",
-                    format!("bytes={pos}-{}", self.content_length.unwrap()),
+                    format!(
+                        "bytes={pos}-{}",
+                        self.content_length
+                            .map(|l| l.to_string())
+                            .unwrap_or_default()
+                    ),
                 )
                 .send()
                 .await

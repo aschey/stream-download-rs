@@ -7,7 +7,7 @@ async fn main() {
     let sink = rodio::Sink::try_new(&handle).unwrap();
 
     let reader = StreamDownload::new_http(
-        "https://www.learningcontainer.com/wp-content/uploads/2020/02/Sample-FLAC-File.flac?_=3"
+        "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.flac"
             .parse()
             .unwrap(),
     );

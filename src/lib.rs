@@ -10,6 +10,7 @@ use tracing::info;
 pub mod http;
 pub mod source;
 
+#[derive(Debug)]
 pub struct StreamDownload {
     output_reader: BufReader<NamedTempFile>,
     handle: SourceHandle,
@@ -23,12 +24,13 @@ impl StreamDownload {
 
     pub fn new<S: SourceStream>(url: S::Url) -> Self {
         let tempfile = tempfile::Builder::new().tempfile().unwrap();
-        let source = Source::<S>::create(url, tempfile.reopen().unwrap());
+        let source = Source::new(tempfile.reopen().unwrap());
         let handle = source.source_handle();
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
-                source.download().await;
+                let stream = S::create(url).await;
+                source.download(stream).await;
             });
         } else {
             thread::spawn(move || {
@@ -38,7 +40,36 @@ impl StreamDownload {
                     .unwrap();
 
                 rt.block_on(async move {
-                    source.download().await;
+                    let stream = S::create(url).await;
+                    source.download(stream).await;
+                });
+            });
+        };
+
+        Self {
+            output_reader: BufReader::new(tempfile),
+            handle,
+        }
+    }
+
+    pub fn from_stream<S: SourceStream>(stream: S) -> Self {
+        let tempfile = tempfile::Builder::new().tempfile().unwrap();
+        let source = Source::new(tempfile.reopen().unwrap());
+        let handle = source.source_handle();
+
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                source.download(stream).await;
+            });
+        } else {
+            thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+
+                rt.block_on(async move {
+                    source.download(stream).await;
                 });
             });
         };
@@ -75,11 +106,18 @@ impl Read for StreamDownload {
 
 impl Seek for StreamDownload {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        // let position = self.handle.position();
-
         let seek_pos = match pos {
             SeekFrom::Start(pos) => pos,
-            SeekFrom::End(pos) => (self.handle.content_length().unwrap() as i64 + pos) as u64,
+            SeekFrom::End(pos) => {
+                if let Some(length) = self.handle.content_length() {
+                    (length as i64 + pos) as u64
+                } else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "Cannot seek from end when content length is unknown",
+                    ));
+                }
+            }
             SeekFrom::Current(pos) => (self.handle.position() as i64 + pos) as u64,
         };
 
