@@ -4,7 +4,7 @@ use std::{
     thread,
 };
 use tempfile::NamedTempFile;
-use tracing::info;
+use tracing::debug;
 
 #[cfg(feature = "http")]
 pub mod http;
@@ -14,6 +14,7 @@ pub mod source;
 pub struct StreamDownload {
     output_reader: BufReader<NamedTempFile>,
     handle: SourceHandle,
+    read_position: u64,
 }
 
 impl StreamDownload {
@@ -48,6 +49,7 @@ impl StreamDownload {
 
         Self {
             output_reader: BufReader::new(tempfile),
+            read_position: 0,
             handle,
         }
     }
@@ -77,29 +79,37 @@ impl StreamDownload {
         Self {
             output_reader: BufReader::new(tempfile),
             handle,
+            read_position: 0,
         }
     }
 }
 
 impl Read for StreamDownload {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let position = self.handle.position();
-        let requested_position = position + buf.len() as u64;
+        debug!("Read request buf len: {}", buf.len());
 
-        if let Some(closest_set) = self.handle.downloaded().get(&position) {
+        let requested_position = self.read_position + buf.len() as u64;
+        debug!(
+            "read: current position: {} requested position: {requested_position}",
+            self.read_position
+        );
+
+        if let Some(closest_set) = self.handle.downloaded().get(&self.read_position) {
+            debug!("Already downloaded {closest_set:?}");
             if closest_set.end >= requested_position {
-                return self.output_reader.read(buf);
+                let read_len = self.output_reader.read(buf);
+                if let Ok(read_len) = read_len {
+                    self.read_position += read_len as u64;
+                }
+                return read_len;
             }
         }
         self.handle.request_position(requested_position);
 
-        // info!(
-        //     "read: current position {position} requested position {:?}. waiting",
-        //     requested_position
-        // );
+        debug!("waiting for position");
         self.handle.wait_for_requested_position();
 
-        // info!("reached requested position {requested_position}");
+        debug!("reached requested position {requested_position}");
         self.output_reader.read(buf)
     }
 }
@@ -118,24 +128,27 @@ impl Seek for StreamDownload {
                     ));
                 }
             }
-            SeekFrom::Current(pos) => (self.handle.position() as i64 + pos) as u64,
+            SeekFrom::Current(pos) => (self.read_position as i64 + pos) as u64,
         };
 
         if let Some(closest_set) = self.handle.downloaded().get(&seek_pos) {
             if closest_set.end >= seek_pos {
-                return self.output_reader.seek(pos);
+                let new_pos = self.output_reader.seek(pos);
+                if let Ok(new_pos) = new_pos {
+                    self.read_position = new_pos;
+                }
             }
         }
 
         self.handle.request_position(seek_pos);
-        // info!(
-        //     "seek: current position {position} requested position {:?}. waiting",
-        //     seek_pos
-        // );
+        debug!(
+            "seek: current position {seek_pos} requested position {:?}. waiting",
+            seek_pos
+        );
         self.handle.seek(seek_pos);
         self.handle.wait_for_requested_position();
 
-        // info!("reached seek position");
+        debug!("reached seek position");
         self.output_reader.seek(pos)
     }
 }

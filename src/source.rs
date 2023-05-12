@@ -8,12 +8,12 @@ use std::{
     fs::File,
     io::{BufWriter, Seek, SeekFrom, Write},
     sync::{
-        atomic::{AtomicI64, AtomicU64, Ordering},
+        atomic::{AtomicI64, Ordering},
         Arc,
     },
 };
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{debug, info, trace};
 
 #[async_trait]
 pub trait SourceStream:
@@ -30,9 +30,8 @@ pub trait SourceStream:
 #[derive(Debug, Clone)]
 pub struct SourceHandle {
     downloaded: Arc<RwLock<RangeSet<u64>>>,
-    position: Arc<AtomicU64>,
     requested_position: Arc<AtomicI64>,
-    position_reached: Arc<(Mutex<bool>, Condvar)>,
+    position_reached: Arc<(Mutex<Waiter>, Condvar)>,
     content_length_retrieved: Arc<(Mutex<bool>, Condvar)>,
     content_length: Arc<AtomicI64>,
     seek_tx: mpsc::Sender<u64>,
@@ -43,10 +42,6 @@ impl SourceHandle {
         self.downloaded.read()
     }
 
-    pub fn position(&self) -> u64 {
-        self.position.load(Ordering::SeqCst)
-    }
-
     pub fn request_position(&self, position: u64) {
         self.requested_position
             .store(position as i64, Ordering::SeqCst);
@@ -54,9 +49,17 @@ impl SourceHandle {
 
     pub fn wait_for_requested_position(&self) {
         let (mutex, cvar) = &*self.position_reached;
-        let mut done = mutex.lock();
-        if !*done {
-            cvar.wait_while(&mut done, |done| !*done);
+        let mut waiter = mutex.lock();
+        if !waiter.stream_done {
+            debug!("Waiting for requested position");
+            cvar.wait_while(&mut waiter, |waiter| {
+                !waiter.stream_done && !waiter.position_reached
+            });
+            if !waiter.stream_done {
+                waiter.position_reached = false;
+            }
+
+            debug!("Position reached");
         }
     }
 
@@ -79,12 +82,18 @@ impl SourceHandle {
     }
 }
 
+#[derive(Default, Debug)]
+struct Waiter {
+    position_reached: bool,
+    stream_done: bool,
+}
+
 pub struct Source {
     writer: BufWriter<File>,
     downloaded: Arc<RwLock<RangeSet<u64>>>,
-    position: Arc<AtomicU64>,
+    position: u64,
     requested_position: Arc<AtomicI64>,
-    position_reached: Arc<(Mutex<bool>, Condvar)>,
+    position_reached: Arc<(Mutex<Waiter>, Condvar)>,
     content_length_retrieved: Arc<(Mutex<bool>, Condvar)>,
     content_length: Arc<AtomicI64>,
     seek_tx: mpsc::Sender<u64>,
@@ -111,7 +120,6 @@ impl Source {
 
     pub async fn download<S: SourceStream>(mut self, mut stream: S) {
         info!("Starting file download");
-
         let content_length = stream.content_length().await;
         if let Some(content_length) = content_length {
             self.content_length
@@ -132,22 +140,24 @@ impl Source {
                 let bytes = bytes.unwrap();
                 self.writer.write_all(&bytes).unwrap();
                 initial_buffer += bytes.len() as u64;
+                trace!("Prefetch: {}/{} bytes", initial_buffer, PREFETCH_BYTES);
                 if initial_buffer >= PREFETCH_BYTES {
-                    self.position.fetch_add(initial_buffer, Ordering::SeqCst);
+                    self.position += initial_buffer;
                     self.downloaded.write().insert(0..initial_buffer);
                     break;
                 }
             } else {
                 info!("File shorter than prefetch length");
                 self.writer.flush().unwrap();
-                self.position.fetch_add(initial_buffer, Ordering::SeqCst);
+                self.position += initial_buffer;
                 self.downloaded.write().insert(0..initial_buffer);
                 let (mutex, cvar) = &*self.position_reached;
-                *mutex.lock() = true;
+                (mutex.lock()).stream_done = true;
                 cvar.notify_all();
                 return;
             }
         }
+
         info!("Prefetch complete");
         loop {
             tokio::select! {
@@ -156,37 +166,39 @@ impl Source {
                         let bytes = bytes.unwrap();
                         let chunk_len = bytes.len() as u64;
                         self.writer.write_all(&bytes).unwrap();
-                        let position = self.position.fetch_add(chunk_len, Ordering::SeqCst);
-                        let new_position = position + chunk_len;
-                        // info!("Received response chunk. position={}", position+chunk_len);
-                        self.downloaded.write().insert(position..new_position);
+                        let new_position = self.position + chunk_len;
+
+                        trace!("Received response chunk. position={}", new_position);
+                        self.downloaded.write().insert(self.position..new_position);
                         let requested = self.requested_position.load(Ordering::SeqCst);
                         if requested > -1 {
-                            // info!("downloader: requested {requested} current {}",position + chunk_len);
+                            debug!("downloader: requested {requested} current {}", new_position);
                         }
 
                         if requested > -1 && new_position as i64 >= requested {
-                            // info!("Notifying");
+                            info!("Notifying");
                             self.requested_position.store(-1, Ordering::SeqCst);
-                            let (_mutex, cvar) = &*self.position_reached;
+                            let (mutex, cvar) = &*self.position_reached;
+                            (mutex.lock()).position_reached = true;
                             cvar.notify_all();
                         }
+                        self.position = new_position;
                     } else {
-                        // info!("done");
+                        info!("Stream finished downloading");
                         self.writer.flush().unwrap();
                         let (mutex, cvar) = &*self.position_reached;
-                        *mutex.lock() = true;
+                        (mutex.lock()).stream_done = true;
                         cvar.notify_all();
                         return;
                     }
                 },
                 pos = self.seek_rx.recv() => {
                     if let Some(pos) = pos {
-                        // info!("Seek position {pos}");
+                        debug!("Received seek position {pos}");
                         let do_seek = {
                             let downloaded = self.downloaded.read();
                             if let Some(range) = downloaded.get(&pos) {
-                                !range.contains(&self.position.load(Ordering::SeqCst))
+                                !range.contains(&self.position)
                             } else {
                                 true
                             }
@@ -195,7 +207,7 @@ impl Source {
                         if do_seek {
                             stream.seek(pos).await;
                             self.writer.seek(SeekFrom::Start(pos)).unwrap();
-                            self.position.store(pos, Ordering::SeqCst);
+                            self.position = pos;
                         }
                     }
                 }
@@ -206,7 +218,6 @@ impl Source {
     pub fn source_handle(&self) -> SourceHandle {
         SourceHandle {
             downloaded: self.downloaded.clone(),
-            position: self.position.clone(),
             requested_position: self.requested_position.clone(),
             position_reached: self.position_reached.clone(),
             seek_tx: self.seek_tx.clone(),

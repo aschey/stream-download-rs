@@ -6,16 +6,16 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.68"
-bytes = "1.4.0"
-futures = "0.3.28"
-futures-util = "0.3.28"
-parking_lot = "0.12.1"
-rangemap = "1.3.0"
-reqwest = {version = "0.11.16", features = ["stream"], optional = true}
-tempfile = "3.5.0"
-tokio = {version = "1.27.0", features = ["sync", "macros", "rt-multi-thread"]}
-tracing = "0.1.37"
+async-trait = "0.1"
+bytes = "1"
+futures = "0.3"
+futures-util = "0.3"
+parking_lot = "0.12"
+rangemap = "1"
+reqwest = { version = "0.11", features = ["stream"], optional = true }
+tempfile = "3"
+tokio = { version = "1", features = ["sync", "macros"] }
+tracing = "0.1"
 
 [features]
 default = ["http"]
@@ -24,3 +24,4 @@ http = ["reqwest"]
 [dev-dependencies]
 rodio = "0.17.1"
 tracing-subscriber = "0.3.16"
+tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread"] }
