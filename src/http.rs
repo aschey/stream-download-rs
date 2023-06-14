@@ -3,12 +3,18 @@ use bytes::Bytes;
 use futures::Stream;
 use reqwest::Client;
 use std::{
+    io,
     pin::Pin,
     str::FromStr,
-    task::{self, Poll},
+    task::{
+        self,
+        Poll,
+    },
 };
-use tracing::{info, warn};
-
+use tracing::{
+    info,
+    warn,
+};
 use crate::source::SourceStream;
 
 pub struct HttpStream {
@@ -31,51 +37,57 @@ impl SourceStream for HttpStream {
     type Url = reqwest::Url;
     type Error = reqwest::Error;
 
-    async fn create(url: Self::Url) -> Self {
+    async fn create(url: Self::Url) -> io::Result<Self> {
         let client = Client::new();
         info!("Requesting content length");
-        let response = client.get(url.as_str()).send().await.unwrap();
-
+        let response =
+            client
+                .get(url.as_str())
+                .send()
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
         let mut content_length = None;
         if let Some(length) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
-            let length = u64::from_str(length.to_str().unwrap()).unwrap();
+            let length =
+                u64::from_str(
+                    length.to_str().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?,
+                ).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
             info!("Got content length {length}");
             content_length = Some(length);
         } else {
             warn!("Content length header missing");
         }
-
         let stream = response.bytes_stream();
-        Self {
+        Ok(Self {
             stream: Box::new(stream),
             client,
             content_length,
             url,
-        }
+        })
     }
 
     async fn content_length(&self) -> Option<u64> {
         self.content_length
     }
-    async fn seek(&mut self, pos: u64) {
-        info!("Seeking");
-        self.stream = Box::new(
-            self.client
+
+    async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
+        info!("Seeking: {start}-{end:?}");
+        let response =
+            self
+                .client
                 .get(self.url.as_str())
-                .header(
-                    "Range",
-                    format!(
-                        "bytes={pos}-{}",
-                        self.content_length
-                            .map(|l| l.to_string())
-                            .unwrap_or_default()
-                    ),
-                )
+                .header("Range", format!("bytes={start}-{}", end.map(|e| e.to_string()).unwrap_or_default()))
                 .send()
                 .await
-                .unwrap()
-                .bytes_stream(),
-        );
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+        if !response.status().is_success() {
+            return response
+                .error_for_status()
+                .map(|_| ())
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()));
+        }
+        self.stream = Box::new(response.bytes_stream());
         info!("Done seeking");
+        Ok(())
     }
 }
