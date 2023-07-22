@@ -44,7 +44,7 @@ impl StreamDownload {
                 rt.block_on(async move {
                     let stream = S::create(url)
                         .await
-                        .tap_err(|e| error!("Error creating stream {e}"))?;
+                        .tap_err(|e| error!("Error creating stream: {e}"))?;
                     source.download(stream).await?;
                     Ok::<_, io::Error>(())
                 })?;
@@ -98,8 +98,7 @@ impl Read for StreamDownload {
         let stream_position = self.output_reader.stream_position()?;
         let requested_position = stream_position + buf.len() as u64;
         debug!(
-            "read: current position: {} requested position: {requested_position}",
-            stream_position
+            "read: current position: {stream_position} requested position: {requested_position}",
         );
         if let Some(closest_set) = self.handle.downloaded().get(&stream_position) {
             debug!("Already downloaded {closest_set:?}");
@@ -151,10 +150,7 @@ impl Seek for StreamDownload {
             }
         }
         self.handle.request_position(seek_pos);
-        debug!(
-            "seek: current position {seek_pos} requested position {:?}. waiting",
-            seek_pos
-        );
+        debug!("seek: current position {seek_pos} requested position {seek_pos}. waiting.",);
         self.handle.seek(seek_pos);
         self.handle.wait_for_requested_position();
         debug!("reached seek position");
