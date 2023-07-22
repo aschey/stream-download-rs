@@ -1,4 +1,4 @@
-use stream_download::StreamDownload;
+use stream_download::{source::Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
 
 fn main() {
@@ -13,9 +13,10 @@ fn main() {
     let sink = rodio::Sink::try_new(&handle).unwrap();
 
     let reader = StreamDownload::new_http(
-        "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.flac"
+        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No 6 - Movement 2 Un poco andante.MP3"
             .parse()
             .unwrap(),
+        Settings::default(),
     )
     .unwrap();
 

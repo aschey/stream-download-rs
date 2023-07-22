@@ -1,4 +1,4 @@
-use stream_download::StreamDownload;
+use stream_download::{source::Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -17,6 +17,7 @@ async fn main() {
         "https://uk1.internet-radio.com/proxy/pinknoise?mp=/stream"
             .parse()
             .unwrap(),
+        Settings::default(),
     )
     .unwrap();
 

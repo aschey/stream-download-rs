@@ -3,8 +3,6 @@ edition = "2021"
 name = "stream-download"
 version = "0.1.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 async-trait = "0.1"
 bytes = "1"
@@ -32,3 +30,8 @@ rodio = { version = "0.17.1", default-features = false, features = [
 ] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread"] }
+
+
+[[example]]
+name = "stream"
+required-features = ["http-rustls"]

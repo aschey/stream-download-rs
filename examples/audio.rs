@@ -1,4 +1,4 @@
-use stream_download::StreamDownload;
+use stream_download::{source::Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -14,9 +14,10 @@ async fn main() {
     let sink = rodio::Sink::try_new(&handle).unwrap();
 
     let reader = StreamDownload::new_http(
-        "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.flac"
+        "http://www.hyperion-records.co.uk/audiotest/3 Schubert String Quartet No 14 in D minor Death and the Maiden, D810 - Movement 3 Scherzo Allegro molto.FLAC"
             .parse()
             .unwrap(),
+        Settings::default(),
     )
     .unwrap();
 

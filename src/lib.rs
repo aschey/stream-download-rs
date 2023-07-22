@@ -1,4 +1,4 @@
-use source::{Source, SourceHandle, SourceStream};
+use source::{Settings, Source, SourceHandle, SourceStream};
 use std::{
     io::{self, BufReader, Read, Seek, SeekFrom},
     thread,
@@ -19,13 +19,13 @@ pub struct StreamDownload {
 
 impl StreamDownload {
     #[cfg(feature = "http")]
-    pub fn new_http(url: reqwest::Url) -> io::Result<Self> {
-        Self::new::<http::HttpStream>(url)
+    pub fn new_http(url: reqwest::Url, settings: Settings) -> io::Result<Self> {
+        Self::new::<http::HttpStream>(url, settings)
     }
 
-    pub fn new<S: SourceStream>(url: S::Url) -> io::Result<Self> {
+    pub fn new<S: SourceStream>(url: S::Url, settings: Settings) -> io::Result<Self> {
         let tempfile = tempfile::Builder::new().tempfile()?;
-        let source = Source::new(tempfile.reopen()?);
+        let source = Source::new(tempfile.reopen()?, settings);
         let handle = source.source_handle();
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
@@ -57,9 +57,9 @@ impl StreamDownload {
         })
     }
 
-    pub fn from_stream<S: SourceStream>(stream: S) -> Result<Self, io::Error> {
+    pub fn from_stream<S: SourceStream>(stream: S, settings: Settings) -> Result<Self, io::Error> {
         let tempfile = tempfile::Builder::new().tempfile()?;
-        let source = Source::new(tempfile.reopen()?);
+        let source = Source::new(tempfile.reopen()?, settings);
         let handle = source.source_handle();
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
@@ -114,8 +114,7 @@ impl Read for StreamDownload {
         debug!("waiting for position");
         self.handle.wait_for_requested_position();
         debug!(
-            "reached requested position {requested_position}: stream position: {}",
-            stream_position
+            "reached requested position {requested_position}: stream position: {stream_position}"
         );
         self.output_reader
             .read(buf)

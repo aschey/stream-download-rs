@@ -88,6 +88,18 @@ struct Waiter {
     stream_done: bool,
 }
 
+pub struct Settings {
+    pub prefetch_bytes: u64,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            prefetch_bytes: 256 * 1024,
+        }
+    }
+}
+
 pub struct Source {
     writer: BufWriter<File>,
     downloaded: Arc<RwLock<RangeSet<u64>>>,
@@ -97,12 +109,11 @@ pub struct Source {
     content_length: Arc<AtomicI64>,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
+    settings: Settings,
 }
 
-const PREFETCH_BYTES: u64 = 1024 * 256;
-
 impl Source {
-    pub fn new(tempfile: File) -> Self {
+    pub fn new(tempfile: File, settings: Settings) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
         Self {
             writer: BufWriter::new(tempfile),
@@ -113,6 +124,7 @@ impl Source {
             seek_tx,
             seek_rx,
             content_length: Default::default(),
+            settings,
         }
     }
 
@@ -138,8 +150,12 @@ impl Source {
             {
                 self.writer.write_all(&bytes)?;
                 let stream_position = self.writer.stream_position()?;
-                trace!("Prefetch: {}/{} bytes", stream_position, PREFETCH_BYTES);
-                if stream_position >= PREFETCH_BYTES {
+                trace!(
+                    "Prefetch: {}/{} bytes",
+                    stream_position,
+                    self.settings.prefetch_bytes
+                );
+                if stream_position >= self.settings.prefetch_bytes {
                     self.downloaded.write().insert(0..stream_position);
                     break;
                 }
@@ -164,11 +180,16 @@ impl Source {
                         let position = self.writer.stream_position()?;
                         self.writer.write_all(&bytes)?;
                         let new_position = self.writer.stream_position()?;
-                        trace!("Received response chunk. position={}", new_position);
-                        self.downloaded.write().insert(position .. new_position);
+                        trace!("Received response chunk. position={position} new_position={new_position}");
+                        // RangeSet will panic if we try to insert a slice with 0 length
+                        // this could happen if the current chunk is empty
+                        if new_position > position {
+                            self.downloaded.write().insert(position..new_position);
+                        }
+
                         let requested = self.requested_position.load(Ordering::SeqCst);
                         if requested > -1 {
-                            debug!("downloader: requested {requested} current {}", new_position);
+                            debug!("downloader: requested {requested} current {new_position}");
                         }
                         if requested > -1 && new_position as i64 >= requested {
                             info!("Notifying requested position reached: {requested}. New position: {new_position}");
