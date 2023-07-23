@@ -1,5 +1,6 @@
 use source::{Settings, Source, SourceHandle, SourceStream};
 use std::{
+    future::{self, Future},
     io::{self, BufReader, Read, Seek, SeekFrom},
     thread,
 };
@@ -24,67 +25,47 @@ impl StreamDownload {
     }
 
     pub fn new<S: SourceStream>(url: S::Url, settings: Settings) -> io::Result<Self> {
-        let tempfile = tempfile::Builder::new().tempfile()?;
-        let source = Source::new(tempfile.reopen()?, settings);
-        let handle = source.source_handle();
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.spawn(async move {
-                let stream = S::create(url)
-                    .await
-                    .tap_err(|e| error!("Error creating stream: {e}"))?;
-                source.download(stream).await?;
-                Ok::<_, io::Error>(())
-            });
-        } else {
-            thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .tap_err(|e| error!("Error creating tokio runtime: {e}"))?;
-                rt.block_on(async move {
-                    let stream = S::create(url)
-                        .await
-                        .tap_err(|e| error!("Error creating stream: {e}"))?;
-                    source.download(stream).await?;
-                    Ok::<_, io::Error>(())
-                })?;
-                Ok::<_, io::Error>(())
-            });
-        };
-        Ok(Self {
-            output_reader: BufReader::new(tempfile),
-            handle,
-        })
+        Self::from_stream_inner(move || S::create(url), settings)
     }
 
     pub fn from_stream<S: SourceStream>(stream: S, settings: Settings) -> Result<Self, io::Error> {
+        Self::from_stream_inner(move || future::ready(Ok(stream)), settings)
+    }
+
+    fn from_stream_inner<S, F, Fut>(make_stream: F, settings: Settings) -> Result<Self, io::Error>
+    where
+        S: SourceStream,
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = io::Result<S>> + Send,
+    {
         let tempfile = tempfile::Builder::new().tempfile()?;
         let source = Source::new(tempfile.reopen()?, settings);
         let handle = source.source_handle();
+        let download_task = async move {
+            source
+                .download(
+                    make_stream()
+                        .await
+                        .tap_err(|e| error!("Error creating stream: {e}"))?,
+                )
+                .await
+                .tap_err(|e| error!("Error downloading stream: {e}"))?;
+            Ok::<_, io::Error>(())
+        };
+
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.spawn(async move {
-                source
-                    .download(stream)
-                    .await
-                    .tap_err(|e| error!("Error downloading stream: {e}"))?;
-                Ok::<_, io::Error>(())
-            });
+            handle.spawn(download_task);
         } else {
             thread::spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .tap_err(|e| error!("Error creating tokio runtime: {e}"))?;
-                rt.block_on(async move {
-                    source
-                        .download(stream)
-                        .await
-                        .tap_err(|e| error!("Error downloading stream: {e}"))?;
-                    Ok::<_, io::Error>(())
-                })?;
+                rt.block_on(download_task)?;
                 Ok::<_, io::Error>(())
             });
         };
+
         Ok(Self {
             output_reader: BufReader::new(tempfile),
             handle,
