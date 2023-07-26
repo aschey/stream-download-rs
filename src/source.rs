@@ -14,8 +14,8 @@ use std::{
     },
     time::Instant,
 };
-use tap::TapFallible;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
 #[async_trait]
@@ -32,6 +32,7 @@ pub trait SourceStream:
 
 #[derive(PartialEq, Eq)]
 enum PrefetchResult {
+    Continue,
     Complete,
     EndOfFile,
 }
@@ -146,7 +147,11 @@ impl Source {
     }
 
     #[instrument(skip_all)]
-    pub async fn download<S: SourceStream>(mut self, mut stream: S) -> io::Result<()> {
+    pub async fn download<S: SourceStream>(
+        mut self,
+        mut stream: S,
+        cancellation_token: CancellationToken,
+    ) -> io::Result<()> {
         debug!("starting file download");
         let content_length = stream.content_length().await;
         if let Some(content_length) = content_length {
@@ -162,34 +167,50 @@ impl Source {
         }
 
         let download_start = Instant::now();
-        let prefetch_result = self.prefetch(&mut stream).await?;
-        debug!(
-            duration = format!("{:?}", download_start.elapsed()),
-            "prefetch complete"
-        );
-        if prefetch_result == PrefetchResult::EndOfFile {
-            return Ok(());
-        }
-
+        let mut prefetch_complete = false;
         loop {
             tokio::select! {
                 bytes = stream.next() => {
-                    if let Some(Ok(bytes)) =
-                        bytes.map(|b| b.tap_err(|e| error!("Error reading from stream: {e}"))) {
-                        self.handle_response_chunk(bytes)?;
-                    } else {
-                        debug!(
-                            download_duration = format!("{:?}", download_start.elapsed()),
-                            "stream finished downloading"
-                        );
+                    let bytes = match bytes {
+                        Some(Err(e)) => {
+                            error!("Error fetching chunk from stream: {e:?}");
+                            continue;
+                        },
+                        Some(Ok(bytes)) => Some(bytes),
+                        None => None,
+                    };
 
-                        match self.download_finish(&mut stream, content_length).await? {
-                            DownloadFinishResult::ChunkMissing => {
-                                continue;
+                    if prefetch_complete {
+                        if let Some(bytes) = bytes {
+                            self.handle_response_chunk(bytes)?;
+                        } else {
+                            debug!(
+                                download_duration = format!("{:?}", download_start.elapsed()),
+                                "stream finished downloading"
+                            );
+                            match self.download_finish(&mut stream, content_length).await? {
+                                DownloadFinishResult::ChunkMissing => {
+                                    continue;
+                                },
+                                DownloadFinishResult::Complete => {
+                                    return Ok(());
+                                },
                             }
-                            DownloadFinishResult::Complete => {
+                        }
+                    } else {
+                        match self.prefetch(bytes).await? {
+                            PrefetchResult::Continue => { },
+                            PrefetchResult::Complete => {
+                                debug!(duration = format!("{:?}", download_start.elapsed()), "prefetch complete");
+                                prefetch_complete = true;
+                            },
+                            PrefetchResult::EndOfFile => {
+                                debug!(
+                                    download_duration = format!("{:?}", download_start.elapsed()),
+                                    "stream finished downloading"
+                                );
                                 return Ok(());
-                            }
+                            },
                         }
                     }
                 },
@@ -201,42 +222,43 @@ impl Source {
                             self.seek(&mut stream, pos, None).await?;
                         }
                     }
+                },
+                _ = cancellation_token.cancelled() => {
+                    debug!("received cancellation request, stopping download task");
+                    return Ok(());
                 }
             }
         }
     }
 
-    async fn prefetch<S: SourceStream>(&mut self, stream: &mut S) -> io::Result<PrefetchResult> {
-        loop {
-            if let Some(Ok(bytes)) = stream
-                .next()
-                .await
-                .map(|b| b.tap_err(|e| error!("Error reading stream: {e}")))
-            {
-                self.writer.write_all(&bytes)?;
-                let stream_position = self.writer.stream_position()?;
-                trace!(
-                    stream_position = stream_position,
-                    prefetch_target = self.settings.prefetch_bytes,
-                    progress = format!(
-                        "{:.2}%",
-                        (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
-                    ),
-                    "prefetch"
-                );
-                if stream_position >= self.settings.prefetch_bytes {
-                    self.downloaded.write().insert(0..stream_position);
-                    return Ok(PrefetchResult::Complete);
-                }
+    async fn prefetch(&mut self, bytes: Option<Bytes>) -> io::Result<PrefetchResult> {
+        if let Some(bytes) = bytes {
+            self.writer.write_all(&bytes)?;
+            let stream_position = self.writer.stream_position()?;
+            trace!(
+                stream_position = stream_position,
+                prefetch_target = self.settings.prefetch_bytes,
+                progress = format!(
+                    "{:.2}%",
+                    (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
+                ),
+                "prefetch"
+            );
+
+            if stream_position >= self.settings.prefetch_bytes {
+                self.downloaded.write().insert(0..stream_position);
+                Ok(PrefetchResult::Complete)
             } else {
-                debug!("file shorter than prefetch length, download finished");
-                self.writer.flush()?;
-                self.downloaded
-                    .write()
-                    .insert(0..self.writer.stream_position()?);
-                self.complete_download();
-                return Ok(PrefetchResult::EndOfFile);
+                Ok(PrefetchResult::Continue)
             }
+        } else {
+            debug!("file shorter than prefetch length, download finished");
+            self.writer.flush()?;
+            self.downloaded
+                .write()
+                .insert(0..self.writer.stream_position()?);
+            self.complete_download();
+            Ok(PrefetchResult::EndOfFile)
         }
     }
 
@@ -292,7 +314,6 @@ impl Source {
                 cvar.notify_all();
             }
         }
-
         Ok(())
     }
 

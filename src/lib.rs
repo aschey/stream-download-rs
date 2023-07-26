@@ -6,6 +6,7 @@ use std::{
 };
 use tap::{Tap, TapFallible};
 use tempfile::NamedTempFile;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
 #[cfg(feature = "http")]
@@ -16,6 +17,7 @@ pub mod source;
 pub struct StreamDownload {
     output_reader: BufReader<NamedTempFile>,
     handle: SourceHandle,
+    download_task_cancellation_token: CancellationToken,
 }
 
 impl StreamDownload {
@@ -32,6 +34,10 @@ impl StreamDownload {
         Self::from_stream_inner(move || future::ready(Ok(stream)), settings)
     }
 
+    pub fn cancel_download(&self) {
+        self.download_task_cancellation_token.cancel();
+    }
+
     fn from_stream_inner<S, F, Fut>(make_stream: F, settings: Settings) -> Result<Self, io::Error>
     where
         S: SourceStream,
@@ -41,27 +47,34 @@ impl StreamDownload {
         let tempfile = tempfile::Builder::new().tempfile()?;
         let source = Source::new(tempfile.reopen()?, settings);
         let handle = source.source_handle();
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_ = cancellation_token.clone();
         let download_task = async move {
             source
                 .download(
                     make_stream()
                         .await
                         .tap_err(|e| error!("Error creating stream: {e}"))?,
+                    cancellation_token_,
                 )
                 .await
                 .tap_err(|e| error!("Error downloading stream: {e}"))?;
+            debug!("download task finished");
             Ok::<_, io::Error>(())
         };
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            debug!("tokio runtime found, spawning download task");
             handle.spawn(download_task);
         } else {
             thread::spawn(move || {
+                debug!("no tokio runtime found, spawning download in separate thread");
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
                     .tap_err(|e| error!("Error creating tokio runtime: {e}"))?;
                 rt.block_on(download_task)?;
+                debug!("download thread finished");
                 Ok::<_, io::Error>(())
             });
         };
@@ -69,7 +82,14 @@ impl StreamDownload {
         Ok(Self {
             output_reader: BufReader::new(tempfile),
             handle,
+            download_task_cancellation_token: cancellation_token,
         })
+    }
+}
+
+impl Drop for StreamDownload {
+    fn drop(&mut self) {
+        self.cancel_download();
     }
 }
 
@@ -135,7 +155,7 @@ impl Seek for StreamDownload {
                 } else {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
-                        "Cannot seek from end when content length is unknown",
+                        "cannot seek from end when content length is unknown",
                     ));
                 }
             }
