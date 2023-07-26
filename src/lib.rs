@@ -6,7 +6,7 @@ use std::{
 };
 use tap::{Tap, TapFallible};
 use tempfile::NamedTempFile;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, trace};
 
 #[cfg(feature = "http")]
 pub mod http;
@@ -76,22 +76,22 @@ impl StreamDownload {
 impl Read for StreamDownload {
     #[instrument(skip_all)]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        debug!(buffer_length = buf.len(), "read requested");
+        trace!(buffer_length = buf.len(), "read requested");
         let stream_position = self.output_reader.stream_position()?;
         let requested_position = stream_position + buf.len() as u64;
-        debug!(
+        trace!(
             current_position = stream_position,
             requested_position = requested_position
         );
 
         if let Some(closest_set) = self.handle.downloaded().get(&stream_position) {
-            debug!(
+            trace!(
                 downloaded_range = format!("{closest_set:?}"),
                 "current position already downloaded"
             );
             if closest_set.end >= requested_position {
                 return self.output_reader.read(buf).tap(|l| {
-                    debug!(
+                    trace!(
                         read_length = format!("{l:?}"),
                         "requested position already downloaded, returning read"
                     )

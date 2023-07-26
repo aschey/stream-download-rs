@@ -30,6 +30,17 @@ pub trait SourceStream:
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()>;
 }
 
+#[derive(PartialEq, Eq)]
+enum PrefetchResult {
+    Complete,
+    EndOfFile,
+}
+
+enum DownloadFinishResult {
+    Complete,
+    ChunkMissing,
+}
+
 #[derive(Debug, Clone)]
 pub struct SourceHandle {
     downloaded: Arc<RwLock<RangeSet<u64>>>,
@@ -151,6 +162,51 @@ impl Source {
         }
 
         let download_start = Instant::now();
+        let prefetch_result = self.prefetch(&mut stream).await?;
+        debug!(
+            duration = format!("{:?}", download_start.elapsed()),
+            "prefetch complete"
+        );
+        if prefetch_result == PrefetchResult::EndOfFile {
+            return Ok(());
+        }
+
+        loop {
+            tokio::select! {
+                bytes = stream.next() => {
+                    if let Some(Ok(bytes)) =
+                        bytes.map(|b| b.tap_err(|e| error!("Error reading from stream: {e}"))) {
+                        self.handle_response_chunk(bytes)?;
+                    } else {
+                        debug!(
+                            download_duration = format!("{:?}", download_start.elapsed()),
+                            "stream finished downloading"
+                        );
+
+                        match self.download_finish(&mut stream, content_length).await? {
+                            DownloadFinishResult::ChunkMissing => {
+                                continue;
+                            }
+                            DownloadFinishResult::Complete => {
+                                return Ok(());
+                            }
+                        }
+                    }
+                },
+                pos = self.seek_rx.recv() => {
+                    if let Some(pos) = pos {
+                        debug!(position = pos, "received seek position");
+                        if self.should_seek(pos)? {
+                            debug!("seek position not yet downloaded");
+                            self.seek(&mut stream, pos, None).await?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn prefetch<S: SourceStream>(&mut self, stream: &mut S) -> io::Result<PrefetchResult> {
         loop {
             if let Some(Ok(bytes)) = stream
                 .next()
@@ -170,71 +226,39 @@ impl Source {
                 );
                 if stream_position >= self.settings.prefetch_bytes {
                     self.downloaded.write().insert(0..stream_position);
-                    break;
+                    return Ok(PrefetchResult::Complete);
                 }
             } else {
-                debug!(
-                    download_duration = format!("{:?}", download_start.elapsed()),
-                    "file shorter than prefetch length, download finished"
-                );
+                debug!("file shorter than prefetch length, download finished");
                 self.writer.flush()?;
                 self.downloaded
                     .write()
                     .insert(0..self.writer.stream_position()?);
                 self.complete_download();
-                return Ok(());
+                return Ok(PrefetchResult::EndOfFile);
             }
         }
-        debug!(
-            duration = format!("{:?}", download_start.elapsed()),
-            "prefetch complete"
-        );
-        loop {
-            tokio::select! {
-                bytes = stream.next() => {
-                    if let Some(Ok(bytes)) =
-                        bytes.map(|b| b.tap_err(|e| error!("Error reading from stream: {e}"))) {
-                        self.handle_response_chunk(bytes)?;
-                    } else {
-                        debug!(
-                            download_duration = format!("{:?}", download_start.elapsed()),
-                            "stream finished downloading"
-                        );
+    }
 
-                        if let Some(content_length) = content_length {
-                            let gap = self.get_download_gap(content_length);
-                            if let Some(gap) = gap {
-                                debug!(missing = format!("{gap:?}"), "downloading missing stream chunk");
-                                stream.seek_range(gap.start, Some(gap.end)).await?;
-                                self.writer.seek(SeekFrom::Start(gap.start))?;
-                                continue;
-                            }
-                        }
-                        self.writer.flush()?;
-                        self.complete_download();
-                        return Ok(());
-                    }
-                },
-                pos = self.seek_rx.recv() => {
-                    if let Some(pos) = pos {
-                        debug!(position = pos,"received seek position");
-                        let do_seek = {
-                            let downloaded = self.downloaded.read();
-                            if let Some(range) = downloaded.get(&pos) {
-                                !range.contains(&self.writer.stream_position()?)
-                            } else {
-                                true
-                            }
-                        };
-                        if do_seek {
-                            debug!("seek position not yet downloaded");
-                            stream.seek_range(pos, None).await?;
-                            self.writer.seek(SeekFrom::Start(pos))?;
-                        }
-                    }
-                }
+    async fn download_finish<S: SourceStream>(
+        &mut self,
+        stream: &mut S,
+        content_length: Option<u64>,
+    ) -> io::Result<DownloadFinishResult> {
+        if let Some(content_length) = content_length {
+            let gap = self.get_download_gap(content_length);
+            if let Some(gap) = gap {
+                debug!(
+                    missing = format!("{gap:?}"),
+                    "downloading missing stream chunk"
+                );
+                self.seek(stream, gap.start, Some(gap.end)).await?;
+                return Ok(DownloadFinishResult::ChunkMissing);
             }
         }
+        self.writer.flush()?;
+        self.complete_download();
+        Ok(DownloadFinishResult::Complete)
     }
 
     fn handle_response_chunk(&mut self, bytes: Bytes) -> io::Result<()> {
@@ -269,6 +293,26 @@ impl Source {
             }
         }
 
+        Ok(())
+    }
+
+    fn should_seek(&mut self, pos: u64) -> io::Result<bool> {
+        let downloaded = self.downloaded.read();
+        Ok(if let Some(range) = downloaded.get(&pos) {
+            !range.contains(&self.writer.stream_position()?)
+        } else {
+            true
+        })
+    }
+
+    async fn seek<S: SourceStream>(
+        &mut self,
+        stream: &mut S,
+        start: u64,
+        end: Option<u64>,
+    ) -> io::Result<()> {
+        stream.seek_range(start, end).await?;
+        self.writer.seek(SeekFrom::Start(start))?;
         Ok(())
     }
 
