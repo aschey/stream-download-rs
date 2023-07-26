@@ -8,8 +8,9 @@ use std::{
     pin::Pin,
     str::FromStr,
     task::{self, Poll},
+    time::Instant,
 };
-use tracing::{info, warn};
+use tracing::{debug, instrument, warn};
 
 pub struct HttpStream {
     stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + Sync>,
@@ -31,14 +32,20 @@ impl SourceStream for HttpStream {
     type Url = reqwest::Url;
     type Error = reqwest::Error;
 
+    #[instrument(skip(url), fields(url = url.to_string()))]
     async fn create(url: Self::Url) -> io::Result<Self> {
         let client = Client::new();
-        info!("Requesting content length");
+        debug!("requesting content length");
+        let request_start = Instant::now();
         let response = client
             .get(url.as_str())
             .send()
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+        debug!(
+            duration = format!("{:?}", request_start.elapsed()),
+            "content length request finished"
+        );
         let mut content_length = None;
         if let Some(length) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
             let length = u64::from_str(
@@ -47,7 +54,7 @@ impl SourceStream for HttpStream {
                     .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?,
             )
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-            info!("Got content length {length}");
+            debug!(content_length = length, "received content length");
             content_length = Some(length);
         } else {
             warn!("Content length header missing");
@@ -65,8 +72,10 @@ impl SourceStream for HttpStream {
         self.content_length
     }
 
+    #[instrument(skip(self))]
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
-        info!("Seeking: {start}-{end:?}");
+        debug!("sending HTTP range request");
+        let request_start = Instant::now();
         let response = self
             .client
             .get(self.url.as_str())
@@ -80,6 +89,10 @@ impl SourceStream for HttpStream {
             .send()
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+        debug!(
+            duration = format!("{:?}", request_start.elapsed()),
+            "HTTP request finished"
+        );
         if !response.status().is_success() {
             return response
                 .error_for_status()
@@ -87,7 +100,7 @@ impl SourceStream for HttpStream {
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()));
         }
         self.stream = Box::new(response.bytes_stream());
-        info!("Done seeking");
+        debug!("done seeking");
         Ok(())
     }
 }

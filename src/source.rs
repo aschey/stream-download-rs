@@ -7,14 +7,16 @@ use std::{
     error::Error,
     fs::File,
     io::{self, BufWriter, Seek, SeekFrom, Write},
+    ops::Range,
     sync::{
         atomic::{AtomicI64, Ordering},
         Arc,
     },
+    time::Instant,
 };
 use tap::TapFallible;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, instrument, trace};
 
 #[async_trait]
 pub trait SourceStream:
@@ -52,14 +54,18 @@ impl SourceHandle {
         let (mutex, cvar) = &*self.position_reached;
         let mut waiter = mutex.lock();
         if !waiter.stream_done {
-            debug!("Waiting for requested position");
+            let wait_start = Instant::now();
+            debug!("waiting for requested position");
             cvar.wait_while(&mut waiter, |waiter| {
                 !waiter.stream_done && !waiter.position_reached
             });
             if !waiter.stream_done {
                 waiter.position_reached = false;
             }
-            debug!("Position reached");
+            debug!(
+                elapsed = format!("{:?}", wait_start.elapsed()),
+                "position reached"
+            );
         }
     }
 
@@ -128,8 +134,9 @@ impl Source {
         }
     }
 
+    #[instrument(skip_all)]
     pub async fn download<S: SourceStream>(mut self, mut stream: S) -> io::Result<()> {
-        info!("Starting file download");
+        debug!("starting file download");
         let content_length = stream.content_length().await;
         if let Some(content_length) = content_length {
             self.content_length
@@ -142,6 +149,8 @@ impl Source {
             *mutex.lock() = true;
             cvar.notify_all();
         }
+
+        let download_start = Instant::now();
         loop {
             if let Some(Ok(bytes)) = stream
                 .next()
@@ -151,79 +160,64 @@ impl Source {
                 self.writer.write_all(&bytes)?;
                 let stream_position = self.writer.stream_position()?;
                 trace!(
-                    "Prefetch: {}/{} bytes",
-                    stream_position,
-                    self.settings.prefetch_bytes
+                    stream_position = stream_position,
+                    prefetch_target = self.settings.prefetch_bytes,
+                    progress = format!(
+                        "{:.2}%",
+                        (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
+                    ),
+                    "prefetch"
                 );
                 if stream_position >= self.settings.prefetch_bytes {
                     self.downloaded.write().insert(0..stream_position);
                     break;
                 }
             } else {
-                info!("File shorter than prefetch length");
+                debug!(
+                    download_duration = format!("{:?}", download_start.elapsed()),
+                    "file shorter than prefetch length, download finished"
+                );
                 self.writer.flush()?;
                 self.downloaded
                     .write()
                     .insert(0..self.writer.stream_position()?);
-                let (mutex, cvar) = &*self.position_reached;
-                (mutex.lock()).stream_done = true;
-                cvar.notify_all();
+                self.complete_download();
                 return Ok(());
             }
         }
-        info!("Prefetch complete");
+        debug!(
+            duration = format!("{:?}", download_start.elapsed()),
+            "prefetch complete"
+        );
         loop {
             tokio::select! {
                 bytes = stream.next() => {
                     if let Some(Ok(bytes)) =
                         bytes.map(|b| b.tap_err(|e| error!("Error reading from stream: {e}"))) {
-                        let position = self.writer.stream_position()?;
-                        self.writer.write_all(&bytes)?;
-                        let new_position = self.writer.stream_position()?;
-                        trace!("Received response chunk. position={position} new_position={new_position}");
-                        // RangeSet will panic if we try to insert a slice with 0 length
-                        // this could happen if the current chunk is empty
-                        if new_position > position {
-                            self.downloaded.write().insert(position..new_position);
-                        }
-
-                        let requested = self.requested_position.load(Ordering::SeqCst);
-                        if requested > -1 {
-                            debug!("downloader: requested {requested} current {new_position}");
-                        }
-                        if requested > -1 && new_position as i64 >= requested {
-                            info!("Notifying requested position reached: {requested}. New position: {new_position}");
-                            self.requested_position.store(-1, Ordering::SeqCst);
-                            let (mutex, cvar) = &*self.position_reached;
-                            (mutex.lock()).position_reached = true;
-                            cvar.notify_all();
-                        }
+                        self.handle_response_chunk(bytes)?;
                     } else {
-                        info!("Stream finished downloading");
+                        debug!(
+                            download_duration = format!("{:?}", download_start.elapsed()),
+                            "stream finished downloading"
+                        );
+
                         if let Some(content_length) = content_length {
-                            let gap = {
-                                let downloaded = self.downloaded.read();
-                                let range = 0 .. content_length;
-                                let mut gaps = downloaded.gaps(&range);
-                                gaps.next()
-                            };
+                            let gap = self.get_download_gap(content_length);
                             if let Some(gap) = gap {
-                                debug!("Downloading missing stream chunk: {gap:?}.");
+                                debug!(missing = format!("{gap:?}"), "downloading missing stream chunk");
                                 stream.seek_range(gap.start, Some(gap.end)).await?;
                                 self.writer.seek(SeekFrom::Start(gap.start))?;
                                 continue;
                             }
                         }
                         self.writer.flush()?;
-                        let (mutex, cvar) = &*self.position_reached;
-                        (mutex.lock()).stream_done = true;
-                        cvar.notify_all();
+                        self.complete_download();
                         return Ok(());
                     }
                 },
                 pos = self.seek_rx.recv() => {
                     if let Some(pos) = pos {
-                        debug!("Received seek position {pos}");
+                        debug!(position = pos,"received seek position");
                         let do_seek = {
                             let downloaded = self.downloaded.read();
                             if let Some(range) = downloaded.get(&pos) {
@@ -233,7 +227,7 @@ impl Source {
                             }
                         };
                         if do_seek {
-                            debug!("Seek position not yet downloaded");
+                            debug!("seek position not yet downloaded");
                             stream.seek_range(pos, None).await?;
                             self.writer.seek(SeekFrom::Start(pos))?;
                         }
@@ -241,6 +235,54 @@ impl Source {
                 }
             }
         }
+    }
+
+    fn handle_response_chunk(&mut self, bytes: Bytes) -> io::Result<()> {
+        let position = self.writer.stream_position()?;
+        self.writer.write_all(&bytes)?;
+        let new_position = self.writer.stream_position()?;
+        trace!(
+            previous_position = position,
+            new_position,
+            chunk_size = new_position - position,
+            "received response chunk"
+        );
+
+        // RangeSet will panic if we try to insert a slice with 0 length this could happen
+        // if the current chunk is empty
+        if new_position > position {
+            self.downloaded.write().insert(position..new_position);
+        }
+        let requested = self.requested_position.load(Ordering::SeqCst);
+        if requested > -1 {
+            debug!(
+                requested_position = requested,
+                current_position = new_position,
+                "received requested position"
+            );
+            if new_position as i64 >= requested {
+                debug!("requested position reached, notifying");
+                self.requested_position.store(-1, Ordering::SeqCst);
+                let (mutex, cvar) = &*self.position_reached;
+                (mutex.lock()).position_reached = true;
+                cvar.notify_all();
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_download_gap(&self, content_length: u64) -> Option<Range<u64>> {
+        let downloaded = self.downloaded.read();
+        let range = 0..content_length;
+        let mut gaps = downloaded.gaps(&range);
+        gaps.next()
+    }
+
+    fn complete_download(&self) {
+        let (mutex, cvar) = &*self.position_reached;
+        (mutex.lock()).stream_done = true;
+        cvar.notify_all();
     }
 
     pub fn source_handle(&self) -> SourceHandle {
