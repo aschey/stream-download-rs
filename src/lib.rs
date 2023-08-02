@@ -23,22 +23,24 @@ pub struct StreamDownload {
 impl StreamDownload {
     #[cfg(feature = "http")]
     pub fn new_http(url: reqwest::Url, settings: Settings) -> io::Result<Self> {
-        Self::new::<http::HttpStream>(url, settings)
+        Self::from_make_stream(
+            move || http::HttpStream::new(reqwest::Client::new(), url),
+            settings,
+        )
     }
 
     pub fn new<S: SourceStream>(url: S::Url, settings: Settings) -> io::Result<Self> {
-        Self::from_stream_inner(move || S::create(url), settings)
+        Self::from_make_stream(move || S::create(url), settings)
     }
 
     pub fn from_stream<S: SourceStream>(stream: S, settings: Settings) -> Result<Self, io::Error> {
-        Self::from_stream_inner(move || future::ready(Ok(stream)), settings)
+        Self::from_make_stream(move || future::ready(Ok(stream)), settings)
     }
 
-    pub fn cancel_download(&self) {
-        self.download_task_cancellation_token.cancel();
-    }
-
-    fn from_stream_inner<S, F, Fut>(make_stream: F, settings: Settings) -> Result<Self, io::Error>
+    pub fn from_make_stream<S, F, Fut>(
+        make_stream: F,
+        settings: Settings,
+    ) -> Result<Self, io::Error>
     where
         S: SourceStream,
         F: FnOnce() -> Fut + Send + 'static,
@@ -84,6 +86,10 @@ impl StreamDownload {
             handle,
             download_task_cancellation_token: cancellation_token,
         })
+    }
+
+    pub fn cancel_download(&self) {
+        self.download_task_cancellation_token.cancel();
     }
 }
 
