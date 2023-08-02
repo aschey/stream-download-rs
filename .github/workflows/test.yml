@@ -10,11 +10,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cache-${{ hashFiles('**/Cargo.toml') }}
+      - name: Install dependencies
+        run: apt-get install -y libasound2-dev
       - name: Minimal build
         run: cargo build --no-default-features
       - name: Clippy
         run: cargo clippy --all-features -- -D warnings
       - name: Build all
-        run: cargo build --all-features
+        run: cargo build --all-features --examples
       - name: Test
         run: cargo test
