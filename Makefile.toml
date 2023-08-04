@@ -1,0 +1,7 @@
+[tasks.coverage]
+script = '''
+cargo llvm-cov --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
+genhtml -o ./target/debug/coverage/ --show-details --highlight --ignore-errors source --legend ./target/debug/lcov.info
+'''
+clear = true
+install_crate = "cargo-llvm-cov"

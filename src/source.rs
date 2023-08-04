@@ -167,7 +167,8 @@ impl Source {
         }
 
         let download_start = Instant::now();
-        let mut prefetch_complete = false;
+        // Don't start prefetch if it's set to 0
+        let mut prefetch_complete = self.settings.prefetch_bytes == 0;
         loop {
             tokio::select! {
                 bytes = stream.next() => {
@@ -219,6 +220,11 @@ impl Source {
                         debug!(position = pos, "received seek position");
                         if self.should_seek(pos)? {
                             debug!("seek position not yet downloaded");
+                            if !prefetch_complete {
+                                debug!("seeking during prefetch, ending prefetch early");
+                                prefetch_complete = true;
+                            }
+
                             self.seek(&mut stream, pos, None).await?;
                         }
                     }

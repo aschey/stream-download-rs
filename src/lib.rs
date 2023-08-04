@@ -138,6 +138,7 @@ impl Read for StreamDownload {
         debug!(
             current_position = stream_position,
             requested_position = requested_position,
+            new_position = self.output_reader.stream_position()?,
             "reached requested position"
         );
         self.output_reader
