@@ -1,5 +1,7 @@
 on: [push]
 name: CI
+env:
+  BINSTALL_VERSION: 1.1.2
 jobs:
   test:
     name: Run tests
@@ -21,7 +23,7 @@ jobs:
       - name: Test
         run: |
           # Install precompiled binaries to improve build time
-          curl -LO https://github.com/cargo-bins/cargo-binstall/releases/download/v1.1.2/cargo-binstall-x86_64-unknown-linux-gnu.tgz
+          curl -LO https://github.com/cargo-bins/cargo-binstall/releases/download/v${{env.BINSTALL_VERSION}}/cargo-binstall-x86_64-unknown-linux-gnu.tgz
           tar -xzvf cargo-binstall-x86_64-unknown-linux-gnu.tgz
           ./cargo-binstall cargo-llvm-cov --no-confirm --force
           cargo llvm-cov --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
