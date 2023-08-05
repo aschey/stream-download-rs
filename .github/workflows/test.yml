@@ -19,4 +19,12 @@ jobs:
       - name: Build all
         run: cargo build --all-features --examples
       - name: Test
-        run: cargo test
+        run: |
+          cargo install cargo-llvm-cov
+          cargo llvm-cov --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          verbose: true
+          fail_ci_if_error: true
+          files: ./target/debug/lcov.info
