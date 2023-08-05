@@ -300,8 +300,8 @@ impl Source {
             "received response chunk"
         );
 
-        // RangeSet will panic if we try to insert a slice with 0 length this could happen
-        // if the current chunk is empty
+        // RangeSet will panic if we try to insert a slice with 0 length.
+        // This could happen if the current chunk is empty.
         if new_position > position {
             self.downloaded.write().insert(position..new_position);
         }

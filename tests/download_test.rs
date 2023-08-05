@@ -1,6 +1,7 @@
 use std::{
     fs,
     io::{Read, Seek, SeekFrom},
+    net::SocketAddr,
     pin::Pin,
     sync::OnceLock,
     task::{Context, Poll},
@@ -154,6 +155,7 @@ impl ClientResponse for TestResponse {
 }
 
 static SERVER_RT: OnceLock<Runtime> = OnceLock::new();
+static SERVER_ADDR: OnceLock<SocketAddr> = OnceLock::new();
 
 #[ctor]
 fn setup() {
@@ -163,14 +165,17 @@ fn setup() {
         )
         .with_line_number(true)
         .with_file(true)
+        .with_test_writer()
         .init();
 
     let rt = SERVER_RT.get_or_init(|| Runtime::new().unwrap());
     let _guard = rt.enter();
     let service = ServeDir::new("./tests/assets");
-    let server = hyper::Server::try_bind(&"127.0.0.1:4301".parse().unwrap())
+
+    let server = hyper::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
         .unwrap()
         .serve(tower::make::Shared::new(service));
+    SERVER_ADDR.get_or_init(|| server.local_addr());
 
     rt.spawn(async move {
         server.await.unwrap();
@@ -190,7 +195,9 @@ async fn test_basic_download(#[case] prefetch_bytes: u64) {
         || {
             HttpStream::new(
                 TestClient::new(tx),
-                "http://127.0.0.1:4301/music.mp3".parse().unwrap(),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
             )
         },
         Settings { prefetch_bytes },
@@ -231,7 +238,9 @@ async fn test_slow_download(#[case] prefetch_bytes: u64) {
         || {
             HttpStream::new(
                 TestClient::new(tx),
-                "http://127.0.0.1:4301/music.mp3".parse().unwrap(),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
             )
         },
         Settings { prefetch_bytes },
@@ -271,7 +280,9 @@ async fn test_seek_basic(#[case] prefetch_bytes: u64) {
         || {
             HttpStream::new(
                 TestClient::new(tx),
-                "http://127.0.0.1:4301/music.mp3".parse().unwrap(),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
             )
         },
         Settings { prefetch_bytes },
@@ -317,7 +328,9 @@ async fn test_seek_initial(#[case] prefetch_bytes: u64) {
         || {
             HttpStream::new(
                 TestClient::new(tx),
-                "http://127.0.0.1:4301/music.mp3".parse().unwrap(),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
             )
         },
         Settings { prefetch_bytes },

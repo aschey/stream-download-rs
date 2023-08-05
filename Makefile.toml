@@ -1,7 +1,24 @@
+
+[tasks.pre-coverage]
+install_crate = "cargo-nextest"
+
 [tasks.coverage]
 script = '''
-cargo llvm-cov --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
+cargo llvm-cov nextest --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
 genhtml -o ./target/debug/coverage/ --show-details --highlight --ignore-errors source --legend ./target/debug/lcov.info
 '''
 clear = true
 install_crate = "cargo-llvm-cov"
+dependencies = ["pre-coverage"]
+
+[tasks.view-coverage]
+script = '''
+xdg-open ./target/debug/coverage/index.html
+'''
+dependencies = ["coverage"]
+
+[tasks.test]
+command = "cargo"
+args = ["nextest", "run"]
+clear = true
+install_crate = "cargo-nextest"
