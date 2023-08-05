@@ -29,3 +29,21 @@ command = "cargo"
 args = ["nextest", "run"]
 clear = true
 install_crate = "cargo-nextest"
+
+[tasks.watch-docs]
+command = "watchexec"
+args = [
+    "-r",
+    "-e",
+    "rs,md",
+    "--",
+    "cargo",
+    "doc",
+    "--all-features",
+    "--no-deps",
+]
+install_crate = "watchexec-cli"
+
+[tasks.build-all]
+command = "cargo"
+args = ["build", "--all-features", "--examples"]

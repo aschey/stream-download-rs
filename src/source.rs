@@ -1,3 +1,5 @@
+//! Provides the [SourceStream](SourceStream) trait which abstracts over the transport used to stream remote content.
+
 use crate::Settings;
 use async_trait::async_trait;
 use bytes::Bytes;

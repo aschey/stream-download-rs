@@ -19,10 +19,11 @@ tokio-util = "0.7"
 tracing = "0.1"
 
 [features]
-default = ["http"]
-http = ["reqwest"]
-http-native-tls = ["reqwest/native-tls"]
-http-rustls = ["reqwest/rustls-tls"]
+default = ["reqwest"]
+http = []
+reqwest = ["http", "dep:reqwest"]
+reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
+reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
 
 [dev-dependencies]
 rodio = { version = "0.17.1", default-features = false, features = [
@@ -39,4 +40,4 @@ rstest = "0.18.1"
 
 [[example]]
 name = "stream"
-required-features = ["http-rustls"]
+required-features = ["reqwest-rustls"]

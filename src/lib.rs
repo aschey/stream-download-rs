@@ -1,3 +1,8 @@
+#![warn(missing_docs)]
+#![forbid(unsafe_code)]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![doc = include_str!("../README.md")]
+
 use source::{Source, SourceHandle, SourceStream};
 use std::{
     future::{self, Future},
@@ -12,6 +17,8 @@ use tracing::{debug, error, instrument, trace};
 
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "reqwest")]
+pub mod reqwest;
 pub mod source;
 
 pub struct Settings {
@@ -52,10 +59,10 @@ pub struct StreamDownload {
 }
 
 impl StreamDownload {
-    #[cfg(feature = "http")]
-    pub fn new_http(url: reqwest::Url, settings: Settings) -> io::Result<Self> {
+    #[cfg(feature = "reqwest")]
+    pub fn new_http(url: ::reqwest::Url, settings: Settings) -> io::Result<Self> {
         Self::from_make_stream(
-            move || http::HttpStream::new(reqwest::Client::new(), url),
+            move || http::HttpStream::new(::reqwest::Client::new(), url),
             settings,
         )
     }
