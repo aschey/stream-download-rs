@@ -32,13 +32,17 @@ One of `http-native-tls` or `http-rustls` is required if you wish to use https s
 ## Usage
 
 ```rust
-let mut reader = StreamDownload::new_http(
-    "https://some-cool-url.com/some-file.mp3".parse()?,
-    Settings::default(),
-)?;
+use stream_download::{Settings, StreamDownload};
 
-let mut buf = Vec::new();
-reader.read_to_end(&mut buf)?;
+fn main() {
+    let mut reader = StreamDownload::new_http(
+        "https://some-cool-url.com/some-file.mp3".parse()?,
+        Settings::default(),
+    )?;
+
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf)?;
+}
 ```
 
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
