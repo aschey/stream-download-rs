@@ -183,37 +183,35 @@ fn setup() {
 #[case(1)]
 #[case(256*1024)]
 #[case(1024*1024)]
-#[tokio::test(flavor = "multi_thread")]
-async fn test_basic_download(#[case] prefetch_bytes: u64) {
-    let (tx, mut rx) = mpsc::channel(32);
-
-    let mut reader = StreamDownload::from_make_stream(
-        || {
-            http::HttpStream::new(
-                TestClient::new(tx),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
-                    .parse()
-                    .unwrap(),
-            )
-        },
-        crate::source::Settings { prefetch_bytes },
+fn test_no_async(#[case] prefetch_bytes: u64) {
+    let mut reader = StreamDownload::new_http(
+        format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            .parse()
+            .unwrap(),
+        Settings { prefetch_bytes },
     )
     .unwrap();
 
-    tokio::spawn(async move {
-        let (command, tx) = rx.recv().await.unwrap();
-        assert_eq!(Command::GetUrl, command);
-        tx.send(Duration::from_millis(0)).unwrap();
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).unwrap();
 
-        let (command, tx) = rx.recv().await.unwrap();
-        assert_eq!(Command::ContentLength, command);
-        tx.send(Duration::from_millis(0)).unwrap();
+    assert_eq!(get_file_buf(), buf);
+}
 
-        while let Some((command, tx)) = rx.recv().await {
-            assert_eq!(Command::NextChunk, command);
-            tx.send(Duration::from_millis(0)).unwrap();
-        }
-    });
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_basic_download(#[case] prefetch_bytes: u64) {
+    let mut reader = StreamDownload::new_http(
+        format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            .parse()
+            .unwrap(),
+        Settings { prefetch_bytes },
+    )
+    .unwrap();
 
     let mut buf = Vec::new();
     reader.read_to_end(&mut buf).unwrap();
