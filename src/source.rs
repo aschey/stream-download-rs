@@ -43,7 +43,7 @@ enum DownloadFinishResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct SourceHandle {
+pub(crate) struct SourceHandle {
     downloaded: Arc<RwLock<RangeSet<u64>>>,
     requested_position: Arc<AtomicI64>,
     position_reached: Arc<(Mutex<Waiter>, Condvar)>,
@@ -89,9 +89,11 @@ impl SourceHandle {
         let (mutex, cvar) = &*self.content_length_retrieved;
         let mut done = mutex.lock();
         if !*done {
+            debug!("content length not retrieved, waiting");
             cvar.wait_while(&mut done, |done| !*done);
         }
         let length = self.content_length.load(Ordering::SeqCst);
+        debug!(content_length = length, "source content length");
         if length > -1 {
             Some(length as u64)
         } else {
@@ -362,7 +364,7 @@ impl Source {
         cvar.notify_all();
     }
 
-    pub fn source_handle(&self) -> SourceHandle {
+    pub(crate) fn source_handle(&self) -> SourceHandle {
         SourceHandle {
             downloaded: self.downloaded.clone(),
             requested_position: self.requested_position.clone(),

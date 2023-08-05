@@ -18,7 +18,7 @@ use tracing::{debug, instrument, warn};
 pub trait Client: Send + Sync + Unpin + 'static {
     type Url: Display + Send + Sync + Unpin;
     type Response: ClientResponse<Error = Self::Error>;
-    type Error: Error + Send;
+    type Error: Error + Send + Sync;
 
     fn create() -> Self;
     async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error>;
@@ -175,6 +175,11 @@ impl<C: Client> SourceStream for HttpStream<C> {
 
     #[instrument(skip(self))]
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
+        if Some(start) == self.content_length {
+            debug!("attempting to seek where start is the length of the stream, returning empty stream");
+            self.stream = Box::new(futures::stream::empty());
+            return Ok(());
+        }
         debug!("sending HTTP range request");
         let request_start = Instant::now();
         let response = self

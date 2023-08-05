@@ -485,6 +485,84 @@ async fn seek_initial(#[case] prefetch_bytes: u64) {
     handle.await.unwrap();
 }
 
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn seek_from_end(
+    #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
+    #[values(0, 1, 16, 2048)] seek_from_end1: i64,
+    #[values(0, 1, 16, 2048)] seek_from_end2: i64,
+) {
+    let (tx, mut rx) = mpsc::channel(32);
+
+    let mut reader = StreamDownload::from_make_stream(
+        || {
+            http::HttpStream::new(
+                TestClient::new(tx),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
+            )
+        },
+        Settings::default().prefetch_bytes(prefetch_bytes),
+    )
+    .unwrap();
+
+    let handle = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let (command, tx) = rx.recv().await.unwrap();
+        assert_eq!(Command::GetUrl, command);
+        tx.send(Duration::from_millis(50)).unwrap();
+
+        let (command, tx) = rx.recv().await.unwrap();
+        assert_eq!(Command::ContentLength, command);
+        tx.send(Duration::from_millis(50)).unwrap();
+
+        let mut range_requests = 0;
+        let mut stream_ends = 0;
+        while let Some((command, tx)) = rx.recv().await {
+            if command == Command::GetRange {
+                range_requests += 1;
+                tx.send(Duration::from_millis(50)).unwrap();
+                continue;
+            }
+            if command == Command::EndStream {
+                stream_ends += 1;
+                continue;
+            }
+            assert_eq!(Command::NextChunk, command);
+            tx.send(Duration::from_millis(50)).unwrap();
+        }
+
+        if seek_from_end1 > 0 {
+            assert_eq!(2, stream_ends);
+            assert_eq!(2, range_requests);
+        } else {
+            assert_eq!(1, stream_ends);
+            assert_eq!(1, range_requests);
+        }
+    });
+
+    reader.seek(SeekFrom::End(seek_from_end1)).unwrap();
+    let mut buf1 = Vec::new();
+    reader.read_to_end(&mut buf1).unwrap();
+
+    reader.seek(SeekFrom::End(seek_from_end2)).unwrap();
+    let mut buf2 = Vec::new();
+    reader.read_to_end(&mut buf2).unwrap();
+
+    // reader.seek(SeekFrom::Start(128)).unwrap();
+
+    // let mut buf2 = Vec::new();
+    // reader.read_to_end(&mut buf2).unwrap();
+
+    let file_buf = get_file_buf();
+
+    assert_eq!(file_buf[file_buf.len() - seek_from_end1 as usize..], buf1);
+    assert_eq!(file_buf[file_buf.len() - seek_from_end2 as usize..], buf2);
+
+    handle.await.unwrap();
+}
+
 fn get_file_buf() -> Vec<u8> {
     fs::read("./assets/music.mp3").unwrap()
 }

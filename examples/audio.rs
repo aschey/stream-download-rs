@@ -14,7 +14,7 @@ async fn main() {
     let sink = rodio::Sink::try_new(&handle).unwrap();
 
     let reader = StreamDownload::new_http(
-        "http://www.hyperion-records.co.uk/audiotest/3 Schubert String Quartet No 14 in D minor Death and the Maiden, D810 - Movement 3 Scherzo Allegro molto.FLAC"
+        "https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.flac"
             .parse()
             .unwrap(),
         Settings::default(),
