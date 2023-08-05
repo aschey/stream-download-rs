@@ -31,10 +31,11 @@ One of `http-native-tls` or `http-rustls` is required if you wish to use https s
 
 ## Usage
 
-```rust
+```rust,no_run
 use stream_download::{Settings, StreamDownload};
+use std::{io::Read, result::Result, error::Error};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let mut reader = StreamDownload::new_http(
         "https://some-cool-url.com/some-file.mp3".parse()?,
         Settings::default(),
@@ -42,6 +43,7 @@ fn main() {
 
     let mut buf = Vec::new();
     reader.read_to_end(&mut buf)?;
+    Ok(())
 }
 ```
 

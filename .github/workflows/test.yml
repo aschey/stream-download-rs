@@ -31,6 +31,8 @@ jobs:
           tar -xzvf cargo-binstall-x86_64-unknown-linux-gnu.tgz
           ./cargo-binstall cargo-llvm-cov --no-confirm --force
           ./cargo-binstall cargo-nextest --no-confirm --force
+          # nextest doesn't support doc tests
+          cargo test --doc
           cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
