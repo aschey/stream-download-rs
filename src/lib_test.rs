@@ -166,7 +166,7 @@ fn setup() {
 
     let rt = SERVER_RT.get_or_init(|| Runtime::new().unwrap());
     let _guard = rt.enter();
-    let service = ServeDir::new("./tests/assets");
+    let service = ServeDir::new("./assets");
 
     let server = hyper::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
         .unwrap()
@@ -365,5 +365,5 @@ async fn test_seek_initial(#[case] prefetch_bytes: u64) {
 }
 
 fn get_file_buf() -> Vec<u8> {
-    fs::read("./tests/assets/music.mp3").unwrap()
+    fs::read("./assets/music.mp3").unwrap()
 }
