@@ -8,16 +8,12 @@ use std::{
     time::Duration,
 };
 
+use crate::{http, Settings, StreamDownload};
 use async_trait::async_trait;
 use bytes::Bytes;
 use ctor::ctor;
 use futures::{Stream, StreamExt};
 use rstest::rstest;
-use stream_download::{
-    http::{ClientResponse, HttpStream},
-    source::Settings,
-    StreamDownload,
-};
 use tokio::{
     runtime::Runtime,
     sync::{mpsc, oneshot},
@@ -90,7 +86,7 @@ impl TestClient {
 }
 
 #[async_trait]
-impl stream_download::http::Client for TestClient {
+impl http::Client for TestClient {
     type Url = reqwest::Url;
     type Response = TestResponse;
     type Error = reqwest::Error;
@@ -103,7 +99,7 @@ impl stream_download::http::Client for TestClient {
         let (tx, rx) = oneshot::channel();
         self.tx.send((Command::GetUrl, tx)).await.unwrap();
         tokio::time::sleep(rx.await.unwrap()).await;
-        stream_download::http::Client::get(&self.inner, url)
+        http::Client::get(&self.inner, url)
             .await
             .map(|r| TestResponse {
                 inner: r,
@@ -125,14 +121,14 @@ impl stream_download::http::Client for TestClient {
 }
 
 #[async_trait]
-impl ClientResponse for TestResponse {
+impl http::ClientResponse for TestResponse {
     type Error = reqwest::Error;
 
     async fn content_length(&self) -> Option<u64> {
         let (tx, rx) = oneshot::channel();
         self.tx.try_send((Command::ContentLength, tx)).unwrap();
         tokio::time::sleep(rx.await.unwrap()).await;
-        ClientResponse::content_length(&self.inner).await
+        http::ClientResponse::content_length(&self.inner).await
     }
 
     async fn is_success(&self) -> bool {
@@ -193,14 +189,14 @@ async fn test_basic_download(#[case] prefetch_bytes: u64) {
 
     let mut reader = StreamDownload::from_make_stream(
         || {
-            HttpStream::new(
+            http::HttpStream::new(
                 TestClient::new(tx),
                 format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                     .parse()
                     .unwrap(),
             )
         },
-        Settings { prefetch_bytes },
+        crate::source::Settings { prefetch_bytes },
     )
     .unwrap();
 
@@ -236,7 +232,7 @@ async fn test_slow_download(#[case] prefetch_bytes: u64) {
 
     let mut reader = StreamDownload::from_make_stream(
         || {
-            HttpStream::new(
+            http::HttpStream::new(
                 TestClient::new(tx),
                 format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                     .parse()
@@ -278,7 +274,7 @@ async fn test_seek_basic(#[case] prefetch_bytes: u64) {
 
     let mut reader = StreamDownload::from_make_stream(
         || {
-            HttpStream::new(
+            http::HttpStream::new(
                 TestClient::new(tx),
                 format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                     .parse()
@@ -326,7 +322,7 @@ async fn test_seek_initial(#[case] prefetch_bytes: u64) {
 
     let mut reader = StreamDownload::from_make_stream(
         || {
-            HttpStream::new(
+            http::HttpStream::new(
                 TestClient::new(tx),
                 format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                     .parse()

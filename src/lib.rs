@@ -37,10 +37,7 @@ impl StreamDownload {
         Self::from_make_stream(move || future::ready(Ok(stream)), settings)
     }
 
-    pub fn from_make_stream<S, F, Fut>(
-        make_stream: F,
-        settings: Settings,
-    ) -> Result<Self, io::Error>
+    fn from_make_stream<S, F, Fut>(make_stream: F, settings: Settings) -> Result<Self, io::Error>
     where
         S: SourceStream,
         F: FnOnce() -> Fut + Send + 'static,
@@ -194,3 +191,7 @@ impl Seek for StreamDownload {
             .tap(|p| debug!(position = format!("{p:?}"), "returning seek position"))
     }
 }
+
+#[cfg(test)]
+#[path = "./lib_test.rs"]
+mod lib_test;

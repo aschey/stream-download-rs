@@ -17,6 +17,13 @@ xdg-open ./target/debug/coverage/index.html
 '''
 dependencies = ["coverage"]
 
+[tasks.view-coverage.windows]
+script = '''
+./target/debug/coverage/index.html
+'''
+dependencies = ["coverage"]
+script_runner = "@shell"
+
 [tasks.test]
 command = "cargo"
 args = ["nextest", "run"]
