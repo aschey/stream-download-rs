@@ -1,4 +1,4 @@
-use stream_download::{source::Settings, StreamDownload};
+use stream_download::{Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

@@ -1,7 +1,8 @@
-use source::{Settings, Source, SourceHandle, SourceStream};
+use source::{Source, SourceHandle, SourceStream};
 use std::{
     future::{self, Future},
     io::{self, BufReader, Read, Seek, SeekFrom},
+    path::PathBuf,
     thread,
 };
 use tap::{Tap, TapFallible};
@@ -12,6 +13,36 @@ use tracing::{debug, error, instrument, trace};
 #[cfg(feature = "http")]
 pub mod http;
 pub mod source;
+
+pub struct Settings {
+    prefetch_bytes: u64,
+    temp_dir: Option<PathBuf>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            prefetch_bytes: 256 * 1024,
+            temp_dir: None,
+        }
+    }
+}
+
+impl Settings {
+    pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
+        Self {
+            prefetch_bytes,
+            ..self
+        }
+    }
+
+    pub fn temp_dir(self, temp_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            temp_dir: Some(temp_dir.into()),
+            ..self
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct StreamDownload {
@@ -43,7 +74,12 @@ impl StreamDownload {
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = io::Result<S>> + Send,
     {
-        let tempfile = tempfile::Builder::new().tempfile()?;
+        let tempfile = if let Some(temp_dir) = &settings.temp_dir {
+            NamedTempFile::new_in(temp_dir)?
+        } else {
+            NamedTempFile::new()?
+        };
+
         let source = Source::new(tempfile.reopen()?, settings);
         let handle = source.source_handle();
         let cancellation_token = CancellationToken::new();

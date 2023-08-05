@@ -294,6 +294,22 @@ async fn basic_download(#[case] prefetch_bytes: u64) {
     assert_eq!(get_file_buf(), buf);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn temp_dir() {
+    let mut reader = StreamDownload::new_http(
+        format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            .parse()
+            .unwrap(),
+        Settings::default().temp_dir("./assets"),
+    )
+    .unwrap();
+
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).unwrap();
+
+    assert_eq!(get_file_buf(), buf);
+}
+
 #[rstest]
 #[case(0)]
 #[case(1)]

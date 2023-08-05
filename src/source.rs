@@ -1,3 +1,4 @@
+use crate::Settings;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
@@ -108,25 +109,7 @@ struct Waiter {
     stream_done: bool,
 }
 
-pub struct Settings {
-    prefetch_bytes: u64,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            prefetch_bytes: 256 * 1024,
-        }
-    }
-}
-
-impl Settings {
-    pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
-        Self { prefetch_bytes }
-    }
-}
-
-pub struct Source {
+pub(crate) struct Source {
     writer: BufWriter<File>,
     downloaded: Arc<RwLock<RangeSet<u64>>>,
     requested_position: Arc<AtomicI64>,
@@ -139,10 +122,10 @@ pub struct Source {
 }
 
 impl Source {
-    pub fn new(tempfile: File, settings: Settings) -> Self {
+    pub(crate) fn new(file: File, settings: Settings) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
         Self {
-            writer: BufWriter::new(tempfile),
+            writer: BufWriter::new(file),
             downloaded: Default::default(),
             requested_position: Arc::new(AtomicI64::new(-1)),
             position_reached: Default::default(),
@@ -155,7 +138,7 @@ impl Source {
     }
 
     #[instrument(skip_all)]
-    pub async fn download<S: SourceStream>(
+    pub(crate) async fn download<S: SourceStream>(
         mut self,
         mut stream: S,
         cancellation_token: CancellationToken,
