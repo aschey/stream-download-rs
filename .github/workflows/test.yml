@@ -20,7 +20,9 @@ jobs:
         run: cargo build --all-features --examples
       - name: Test
         run: |
-          cargo install cargo-llvm-cov
+          # Install precompiled binaries to improve build time
+          curl -LO https://github.com/cargo-bins/cargo-binstall/releases/download/v0.13.3/cargo-binstall-x86_64-unknown-linux-gnu.tgz
+          ./cargo-binstall cargo-llvm-cov --no-confirm --force
           cargo llvm-cov --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
