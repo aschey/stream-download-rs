@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{http, Settings, StreamDownload};
+use crate::{http, source::SourceStream, Settings, StreamDownload};
 use async_trait::async_trait;
 use bytes::Bytes;
 use ctor::ctor;
@@ -210,7 +210,7 @@ fn no_async(#[case] prefetch_bytes: u64) {
         format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
             .parse()
             .unwrap(),
-        Settings { prefetch_bytes },
+        Settings::default().prefetch_bytes(prefetch_bytes),
     )
     .unwrap();
 
@@ -226,12 +226,65 @@ fn no_async(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 #[tokio::test(flavor = "multi_thread")]
+async fn new(#[case] prefetch_bytes: u64) {
+    let mut reader = StreamDownload::new::<http::HttpStream<reqwest::Client>>(
+        format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            .parse()
+            .unwrap(),
+        Settings::default().prefetch_bytes(prefetch_bytes),
+    )
+    .unwrap();
+
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).unwrap();
+
+    assert_eq!(get_file_buf(), buf);
+}
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+#[tokio::test(flavor = "multi_thread")]
+async fn from_stream(#[case] prefetch_bytes: u64) {
+    let stream = http::HttpStream::new(
+        reqwest::Client::new(),
+        format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            .parse()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let file_buf = get_file_buf();
+    assert_eq!(
+        file_buf.len() as u64,
+        stream.content_length().await.unwrap()
+    );
+
+    let mut reader =
+        StreamDownload::from_stream(stream, Settings::default().prefetch_bytes(prefetch_bytes))
+            .unwrap();
+
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).unwrap();
+
+    assert_eq!(file_buf, buf);
+}
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+#[tokio::test(flavor = "multi_thread")]
 async fn basic_download(#[case] prefetch_bytes: u64) {
     let mut reader = StreamDownload::new_http(
         format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
             .parse()
             .unwrap(),
-        Settings { prefetch_bytes },
+        Settings::default().prefetch_bytes(prefetch_bytes),
     )
     .unwrap();
 
@@ -259,7 +312,7 @@ async fn slow_download(#[case] prefetch_bytes: u64) {
                     .unwrap(),
             )
         },
-        Settings { prefetch_bytes },
+        Settings::default().prefetch_bytes(prefetch_bytes),
     )
     .unwrap();
     let handle = tokio::spawn(async move {
@@ -307,7 +360,7 @@ async fn seek_basic(#[case] prefetch_bytes: u64) {
                     .unwrap(),
             )
         },
-        Settings { prefetch_bytes },
+        Settings::default().prefetch_bytes(prefetch_bytes),
     )
     .unwrap();
     let handle = tokio::spawn(async move {
@@ -361,7 +414,7 @@ async fn seek_initial(#[case] prefetch_bytes: u64) {
                     .unwrap(),
             )
         },
-        Settings { prefetch_bytes },
+        Settings::default().prefetch_bytes(prefetch_bytes),
     )
     .unwrap();
 

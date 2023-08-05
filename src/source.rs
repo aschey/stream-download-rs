@@ -107,7 +107,7 @@ struct Waiter {
 }
 
 pub struct Settings {
-    pub prefetch_bytes: u64,
+    prefetch_bytes: u64,
 }
 
 impl Default for Settings {
@@ -115,6 +115,12 @@ impl Default for Settings {
         Self {
             prefetch_bytes: 256 * 1024,
         }
+    }
+}
+
+impl Settings {
+    pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
+        Self { prefetch_bytes }
     }
 }
 
