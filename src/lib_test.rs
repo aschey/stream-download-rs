@@ -29,8 +29,10 @@ struct TestClient {
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     GetUrl,
+    GetRange,
     ContentLength,
     NextChunk,
+    EndStream,
 }
 
 struct TestResponse {
@@ -62,6 +64,7 @@ impl Stream for TestStream {
                 self.tx.try_send((Command::NextChunk, tx)).unwrap();
                 let waker = cx.waker().clone();
                 self.state = StreamState::Waiting;
+
                 tokio::spawn(async move {
                     tokio::time::sleep(rx.await.unwrap()).await;
                     waker.wake();
@@ -70,7 +73,21 @@ impl Stream for TestStream {
             }
             StreamState::Waiting => {
                 self.state = StreamState::Ready;
-                Pin::new(self).inner.poll_next_unpin(cx)
+                let mut this = Pin::new(self);
+                let res = this.inner.poll_next_unpin(cx);
+
+                match &res {
+                    Poll::Ready(None) => {
+                        let (tx, _rx) = oneshot::channel();
+                        this.tx.try_send((Command::EndStream, tx)).unwrap();
+                    }
+                    Poll::Ready(Some(Ok(res))) if res.is_empty() => {
+                        let (tx, _rx) = oneshot::channel();
+                        this.tx.try_send((Command::EndStream, tx)).unwrap();
+                    }
+                    _ => {}
+                };
+                res
             }
         }
     }
@@ -99,6 +116,7 @@ impl http::Client for TestClient {
         let (tx, rx) = oneshot::channel();
         self.tx.send((Command::GetUrl, tx)).await.unwrap();
         tokio::time::sleep(rx.await.unwrap()).await;
+
         http::Client::get(&self.inner, url)
             .await
             .map(|r| TestResponse {
@@ -113,6 +131,10 @@ impl http::Client for TestClient {
         start: u64,
         end: Option<u64>,
     ) -> Result<Self::Response, Self::Error> {
+        let (tx, rx) = oneshot::channel();
+        self.tx.send((Command::GetRange, tx)).await.unwrap();
+        tokio::time::sleep(rx.await.unwrap()).await;
+
         Ok(TestResponse {
             inner: self.inner.get_range(url, start, end).await?,
             tx: self.tx.clone(),
@@ -183,7 +205,7 @@ fn setup() {
 #[case(1)]
 #[case(256*1024)]
 #[case(1024*1024)]
-fn test_no_async(#[case] prefetch_bytes: u64) {
+fn no_async(#[case] prefetch_bytes: u64) {
     let mut reader = StreamDownload::new_http(
         format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
             .parse()
@@ -204,7 +226,7 @@ fn test_no_async(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_basic_download(#[case] prefetch_bytes: u64) {
+async fn basic_download(#[case] prefetch_bytes: u64) {
     let mut reader = StreamDownload::new_http(
         format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
             .parse()
@@ -225,7 +247,7 @@ async fn test_basic_download(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_slow_download(#[case] prefetch_bytes: u64) {
+async fn slow_download(#[case] prefetch_bytes: u64) {
     let (tx, mut rx) = mpsc::channel(32);
 
     let mut reader = StreamDownload::from_make_stream(
@@ -240,7 +262,7 @@ async fn test_slow_download(#[case] prefetch_bytes: u64) {
         Settings { prefetch_bytes },
     )
     .unwrap();
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
         let (command, tx) = rx.recv().await.unwrap();
         assert_eq!(Command::GetUrl, command);
@@ -251,14 +273,20 @@ async fn test_slow_download(#[case] prefetch_bytes: u64) {
         tx.send(Duration::from_millis(50)).unwrap();
 
         while let Some((command, tx)) = rx.recv().await {
+            if command == Command::EndStream {
+                return;
+            }
             assert_eq!(Command::NextChunk, command);
             tx.send(Duration::from_millis(50)).unwrap();
         }
+        panic!("Stream not finished");
     });
 
     let mut buf = Vec::new();
     reader.read_to_end(&mut buf).unwrap();
     assert_eq!(get_file_buf(), buf);
+
+    handle.await.unwrap();
 }
 
 #[rstest]
@@ -267,7 +295,7 @@ async fn test_slow_download(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_seek_basic(#[case] prefetch_bytes: u64) {
+async fn seek_basic(#[case] prefetch_bytes: u64) {
     let (tx, mut rx) = mpsc::channel(32);
 
     let mut reader = StreamDownload::from_make_stream(
@@ -282,7 +310,7 @@ async fn test_seek_basic(#[case] prefetch_bytes: u64) {
         Settings { prefetch_bytes },
     )
     .unwrap();
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
         let (command, tx) = rx.recv().await.unwrap();
         assert_eq!(Command::GetUrl, command);
@@ -293,9 +321,13 @@ async fn test_seek_basic(#[case] prefetch_bytes: u64) {
         tx.send(Duration::from_millis(50)).unwrap();
 
         while let Some((command, tx)) = rx.recv().await {
+            if command == Command::EndStream {
+                return;
+            }
             assert_eq!(Command::NextChunk, command);
             tx.send(Duration::from_millis(50)).unwrap();
         }
+        panic!("Stream not finished");
     });
 
     let mut initial_buf = [0; 4096];
@@ -307,6 +339,8 @@ async fn test_seek_basic(#[case] prefetch_bytes: u64) {
     let file_buf = get_file_buf();
     assert_eq!(file_buf[0..4096], initial_buf);
     assert_eq!(file_buf, buf);
+
+    handle.await.unwrap();
 }
 
 #[rstest]
@@ -315,7 +349,7 @@ async fn test_seek_basic(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_seek_initial(#[case] prefetch_bytes: u64) {
+async fn seek_initial(#[case] prefetch_bytes: u64) {
     let (tx, mut rx) = mpsc::channel(32);
 
     let mut reader = StreamDownload::from_make_stream(
@@ -331,7 +365,7 @@ async fn test_seek_initial(#[case] prefetch_bytes: u64) {
     )
     .unwrap();
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(50)).await;
         let (command, tx) = rx.recv().await.unwrap();
         assert_eq!(Command::GetUrl, command);
@@ -341,10 +375,44 @@ async fn test_seek_initial(#[case] prefetch_bytes: u64) {
         assert_eq!(Command::ContentLength, command);
         tx.send(Duration::from_millis(50)).unwrap();
 
+        // Range request for first seek
         while let Some((command, tx)) = rx.recv().await {
+            if command == Command::GetRange {
+                tx.send(Duration::from_millis(50)).unwrap();
+                break;
+            }
             assert_eq!(Command::NextChunk, command);
             tx.send(Duration::from_millis(50)).unwrap();
         }
+
+        // First download
+        while let Some((command, tx)) = rx.recv().await {
+            if command == Command::EndStream {
+                break;
+            }
+            assert_eq!(Command::NextChunk, command);
+            tx.send(Duration::from_millis(50)).unwrap();
+        }
+
+        // Range request for second seek
+        while let Some((command, tx)) = rx.recv().await {
+            if command == Command::GetRange {
+                tx.send(Duration::from_millis(50)).unwrap();
+                break;
+            }
+            assert_eq!(Command::NextChunk, command);
+            tx.send(Duration::from_millis(50)).unwrap();
+        }
+
+        // Second download
+        while let Some((command, tx)) = rx.recv().await {
+            if command == Command::EndStream {
+                return;
+            }
+            assert_eq!(Command::NextChunk, command);
+            tx.send(Duration::from_millis(50)).unwrap();
+        }
+        panic!("stream not finished");
     });
 
     reader.seek(SeekFrom::Start(65536)).unwrap();
@@ -360,6 +428,8 @@ async fn test_seek_initial(#[case] prefetch_bytes: u64) {
     let file_buf = get_file_buf();
     assert_eq!(file_buf[65536..], buf1);
     assert_eq!(file_buf[128..], buf2);
+
+    handle.await.unwrap();
 }
 
 fn get_file_buf() -> Vec<u8> {
