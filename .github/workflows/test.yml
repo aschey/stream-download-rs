@@ -16,7 +16,9 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
       - name: Install dependencies
-        run: sudo apt-get install -y libasound2-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
       - name: Minimal build
         run: cargo build --no-default-features
       - name: Clippy
