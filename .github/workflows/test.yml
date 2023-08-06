@@ -54,7 +54,10 @@ jobs:
       - name: Install cargo-minimal-versions
         uses: taiki-e/install-action@cargo-minimal-versions
       - name: Cargo minimal-versions
-        run: cargo minimal-versions check
+        run: |
+          cargo minimal-versions check --no-default-features
+          cargo minimal-versions check
+          cargo minimal-versions check --all-features
 
   min-rust:
     name: Check MSRV
