@@ -2,6 +2,14 @@
 edition = "2021"
 name = "stream-download"
 version = "0.1.0"
+rust-version = "1.63.0"
+authors = ["Austin Schey <aschey13@gmail.com>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/aschey/stream-download-rs"
+description = "A library for streaming content to a local file-backed cache"
+categories = ["multimedia", "asynchronous", "caching"]
+keywords = ["audio", "stream", "media"]
 
 [dependencies]
 async-trait = "0.1.9"

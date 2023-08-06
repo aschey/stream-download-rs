@@ -6,7 +6,7 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/aschey/stream-download-rs)
 ![Lines of Code](https://aschey.tech/tokei/github/aschey/stream-download-rs)
 
-[stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location and using it as a [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
+[stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location to a local file-backed cache and using it as a [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
 The file is downloaded in the background and you can perform read or seek operations before the download is finished.
 This is useful for media applications that need to stream large files that may take several seconds or minutes to download.
 
@@ -50,3 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
+
+## Supported Rust Versions
+
+The MSRV is currently `1.63.0`.
