@@ -21,7 +21,7 @@ pub mod http;
 pub mod reqwest;
 pub mod source;
 
-/// Settings to configure the stream behavior
+/// Settings to configure the stream behavior.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     prefetch_bytes: u64,

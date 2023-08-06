@@ -8,11 +8,10 @@ use std::str::FromStr;
 use tap::TapFallible;
 use tracing::warn;
 
-#[async_trait]
 impl ClientResponse for reqwest::Response {
     type Error = reqwest::Error;
 
-    async fn content_length(&self) -> Option<u64> {
+    fn content_length(&self) -> Option<u64> {
         if let Some(length) = self.headers().get(reqwest::header::CONTENT_LENGTH) {
             let content_length = length
                 .to_str()
@@ -29,20 +28,15 @@ impl ClientResponse for reqwest::Response {
         }
     }
 
-    async fn is_success(&self) -> bool {
+    fn is_success(&self) -> bool {
         self.status().is_success()
     }
 
-    async fn status_error(self) -> String {
-        match self.error_for_status() {
-            Ok(_) => String::default(),
-            Err(e) => e.to_string(),
-        }
+    fn status_error(self) -> Result<(), Self::Error> {
+        self.error_for_status().map(|_| ())
     }
 
-    async fn stream(
-        self,
-    ) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync> {
+    fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync> {
         Box::new(self.bytes_stream())
     }
 }

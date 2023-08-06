@@ -21,15 +21,31 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
+/// Represents a remote resource that can be streamed over the network.
+/// Streaming over http is implemented via the [HttpStream](crate::http::HttpStream) implementation
+/// if the `http` feature is enabled.
+///
+/// The implementation must also implement the [Stream](https://docs.rs/futures/latest/futures/stream/trait.Stream.html) trait.
 #[async_trait]
 pub trait SourceStream:
-    Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync + Sized + 'static
+    Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync + Sized + 'static
 {
+    /// URL of the remote resource.
     type Url: Send;
-    type Error: Error + Send;
 
+    /// Error type thrown by the underlying stream.
+    type StreamError: Error + Send;
+
+    /// Creates an instance of the stream.
     async fn create(url: Self::Url) -> io::Result<Self>;
-    async fn content_length(&self) -> Option<u64>;
+
+    /// Returns the size of the remote resource in bytes.
+    /// The result should be `None` if the stream is infinite or doesn't have a known length.
+    fn content_length(&self) -> Option<u64>;
+
+    /// Seeks to a specific position in the stream.
+    /// This method is only called if the requested range has not been downloaded,
+    /// so this method should jump to the requested position in the stream as quickly as possible.
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()>;
 }
 
@@ -146,7 +162,7 @@ impl Source {
         cancellation_token: CancellationToken,
     ) -> io::Result<()> {
         debug!("starting file download");
-        let content_length = stream.content_length().await;
+        let content_length = stream.content_length();
         if let Some(content_length) = content_length {
             self.content_length
                 .swap(content_length as i64, Ordering::SeqCst);

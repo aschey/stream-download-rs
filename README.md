@@ -7,10 +7,8 @@
 ![Lines of Code](https://aschey.tech/tokei/github/aschey/stream-download-rs)
 
 [stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location to a local file-backed cache and using it as a [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
-The file is downloaded in the background and you can perform read or seek operations before the download is finished.
-This is useful for media applications that need to stream large files that may take several seconds or minutes to download.
-
-Read requests that attempt to access part of the stream that hasn't been downloaded yet will block until that part of the stream has completed downloading.
+The requested content is downloaded in the background and read or seek operations are allowed before the download is finished. Seek operations may cause the stream to be restarted from the requested position if the download is still in progress.
+This is useful for media applications that need to stream large files that may take a long time to download.
 
 HTTP is the only transport supplied by this library, but you can use a custom transport by implementing the `SourceStream` trait.
 
@@ -50,6 +48,33 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
+
+## Streams with Unknown Length
+
+Resources such as standalone songs or videos have a known length that we use to support certain seeking functionality.
+Infinite streams or those that otherwise don't have a known length are still supported, but attempting to seek from the end of the stream will return an error.
+This may cause issues with certain audio or video libraries that attempt to perform such seek operations.
+If it's necessary to explicitly check for an infinite stream, you can check the stream's content length ahead of time. 
+
+```rust,no_run
+use stream_download::{Settings, StreamDownload, http::HttpStream, source::SourceStream};
+use std::{io::Read, result::Result, error::Error};
+use reqwest::Client;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let stream = HttpStream::new(Client::new(), "https://some-cool-url.com/some-stream".parse()?).await?;
+    let content_length = stream.content_length();
+    let is_infinite = content_length.is_none();
+    println!("Infinite stream = {is_infinite}");
+
+    let mut reader = StreamDownload::from_stream(stream, Settings::default())?;
+
+    let mut buf = [0; 256];
+    reader.read_exact(&mut buf)?;
+    Ok(())
+}
+```
 
 ## Supported Rust Versions
 

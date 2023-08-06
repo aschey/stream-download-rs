@@ -30,7 +30,6 @@ struct TestClient {
 enum Command {
     GetUrl,
     GetRange,
-    ContentLength,
     NextChunk,
     EndStream,
 }
@@ -142,31 +141,25 @@ impl http::Client for TestClient {
     }
 }
 
-#[async_trait]
 impl http::ClientResponse for TestResponse {
     type Error = reqwest::Error;
 
-    async fn content_length(&self) -> Option<u64> {
-        let (tx, rx) = oneshot::channel();
-        self.tx.try_send((Command::ContentLength, tx)).unwrap();
-        tokio::time::sleep(rx.await.unwrap()).await;
-        http::ClientResponse::content_length(&self.inner).await
+    fn content_length(&self) -> Option<u64> {
+        http::ClientResponse::content_length(&self.inner)
     }
 
-    async fn is_success(&self) -> bool {
-        self.inner.is_success().await
+    fn is_success(&self) -> bool {
+        self.inner.is_success()
     }
 
-    async fn status_error(self) -> String {
-        self.inner.status_error().await
+    fn status_error(self) -> Result<(), Self::Error> {
+        self.inner.status_error()
     }
 
-    async fn stream(
-        self,
-    ) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync> {
+    fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync> {
         Box::new(TestStream {
             tx: self.tx.clone(),
-            inner: self.inner.stream().await,
+            inner: self.inner.stream(),
             state: StreamState::Ready,
         })
     }
@@ -258,10 +251,7 @@ async fn from_stream(#[case] prefetch_bytes: u64) {
     .unwrap();
 
     let file_buf = get_file_buf();
-    assert_eq!(
-        file_buf.len() as u64,
-        stream.content_length().await.unwrap()
-    );
+    assert_eq!(file_buf.len() as u64, stream.content_length().unwrap());
 
     let mut reader =
         StreamDownload::from_stream(stream, Settings::default().prefetch_bytes(prefetch_bytes))
@@ -337,10 +327,6 @@ async fn slow_download(#[case] prefetch_bytes: u64) {
         assert_eq!(Command::GetUrl, command);
         tx.send(Duration::from_millis(50)).unwrap();
 
-        let (command, tx) = rx.recv().await.unwrap();
-        assert_eq!(Command::ContentLength, command);
-        tx.send(Duration::from_millis(50)).unwrap();
-
         while let Some((command, tx)) = rx.recv().await {
             if command == Command::EndStream {
                 return;
@@ -383,10 +369,6 @@ async fn seek_basic(#[case] prefetch_bytes: u64) {
         tokio::time::sleep(Duration::from_millis(50)).await;
         let (command, tx) = rx.recv().await.unwrap();
         assert_eq!(Command::GetUrl, command);
-        tx.send(Duration::from_millis(50)).unwrap();
-
-        let (command, tx) = rx.recv().await.unwrap();
-        assert_eq!(Command::ContentLength, command);
         tx.send(Duration::from_millis(50)).unwrap();
 
         while let Some((command, tx)) = rx.recv().await {
@@ -440,10 +422,6 @@ async fn seek_start_end(
         tokio::time::sleep(Duration::from_millis(50)).await;
         let (command, tx) = rx.recv().await.unwrap();
         assert_eq!(Command::GetUrl, command);
-        tx.send(Duration::from_millis(50)).unwrap();
-
-        let (command, tx) = rx.recv().await.unwrap();
-        assert_eq!(Command::ContentLength, command);
         tx.send(Duration::from_millis(50)).unwrap();
 
         let mut range_requests = 0;
