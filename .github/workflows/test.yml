@@ -2,6 +2,7 @@ on: [push]
 name: CI
 env:
   BINSTALL_VERSION: 1.1.2
+  RUST_MIN: 1.63
 
 jobs:
   test:
@@ -11,8 +12,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: cache-${{ hashFiles('**/Cargo.toml') }}
       - name: Install dependencies
         run: sudo apt-get install -y libasound2-dev
       - name: Minimal build
@@ -24,19 +23,27 @@ jobs:
           cargo clippy --all-features
       - name: Build all
         run: cargo build --all-features --examples
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
       - name: Test
         run: |
-          # Install precompiled binaries to improve build time
-          curl -LO https://github.com/cargo-bins/cargo-binstall/releases/download/v${{env.BINSTALL_VERSION}}/cargo-binstall-x86_64-unknown-linux-gnu.tgz
-          tar -xzvf cargo-binstall-x86_64-unknown-linux-gnu.tgz
-          ./cargo-binstall cargo-llvm-cov --no-confirm --force
-          ./cargo-binstall cargo-nextest --no-confirm --force
-          # nextest doesn't support doc tests
           cargo test --doc
-          cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
+          cargo llvm-cov --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           verbose: true
           fail_ci_if_error: true
           files: ./codecov.json
+
+  min-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust ${{ env.RUST_MIN }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_MIN }}
+      - uses: Swatinem/rust-cache@v2
+      - name: "check MSRV"
+        run: cargo check --workspace --all-features
