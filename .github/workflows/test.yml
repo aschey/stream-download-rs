@@ -28,10 +28,12 @@ jobs:
         run: cargo build --all-features --examples
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
       - name: Test
         run: |
           cargo test --doc
-          cargo llvm-cov --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
+          cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
