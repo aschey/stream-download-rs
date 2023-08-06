@@ -300,7 +300,7 @@ async fn temp_dir() {
         format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
             .parse()
             .unwrap(),
-        Settings::default().temp_dir("./assets"),
+        Settings::default().download_dir("./assets"),
     )
     .unwrap();
 

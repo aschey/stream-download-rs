@@ -21,21 +21,27 @@ pub mod http;
 pub mod reqwest;
 pub mod source;
 
+/// Settings to configure the stream behavior
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     prefetch_bytes: u64,
-    temp_dir: Option<PathBuf>,
+    download_dir: Option<PathBuf>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             prefetch_bytes: 256 * 1024,
-            temp_dir: None,
+            download_dir: None,
         }
     }
 }
 
 impl Settings {
+    /// How many bytes to download from the stream before allowing read requests.
+    /// This is used to create a buffer between the read position and the stream position
+    /// and prevent stuttering.
+    /// The default value is 256 kilobytes.
     pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
         Self {
             prefetch_bytes,
@@ -43,14 +49,24 @@ impl Settings {
         }
     }
 
-    pub fn temp_dir(self, temp_dir: impl Into<PathBuf>) -> Self {
+    /// Set the directory used to download the streamed content.
+    /// Temporary files will be cleaned up when the stream is dropped.
+    /// By default this uses the OS-specific temporary directory.
+    pub fn download_dir(self, download_dir: impl Into<PathBuf>) -> Self {
         Self {
-            temp_dir: Some(temp_dir.into()),
+            download_dir: Some(download_dir.into()),
             ..self
         }
     }
 }
 
+/// Represents content streamed from a remote source
+/// This struct implements [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)
+/// so it can be used as a generic source for libraries and applications that operate on these traits.
+/// On creation, an async task is spawned that will immediately start to download the remote content.
+///
+/// Any read attempts that request part of the stream that hasn't been downloaded yet will block until the requested portion is reached.
+/// Any seek attempts that meet the same criteria will result in additional request to restart the stream download from the seek point.
 #[derive(Debug)]
 pub struct StreamDownload {
     output_reader: BufReader<NamedTempFile>,
@@ -60,19 +76,82 @@ pub struct StreamDownload {
 
 impl StreamDownload {
     #[cfg(feature = "reqwest")]
+    /// Creates a new [StreamDownload](StreamDownload) that accesses an HTTP resource at the given URL.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use stream_download::{Settings, StreamDownload};
+    /// use std::{io::Read, result::Result, error::Error};
+    ///
+    /// fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut reader = StreamDownload::new_http(
+    ///         "https://some-cool-url.com/some-file.mp3".parse()?,
+    ///         Settings::default(),
+    ///     )?;
+    ///
+    ///     let mut buf = Vec::new();
+    ///     reader.read_to_end(&mut buf)?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn new_http(url: ::reqwest::Url, settings: Settings) -> io::Result<Self> {
-        Self::from_make_stream(
-            move || http::HttpStream::new(::reqwest::Client::new(), url),
-            settings,
-        )
+        Self::new::<http::HttpStream<::reqwest::Client>>(url, settings)
     }
 
+    /// Creates a new [StreamDownload](StreamDownload) that accesses a remote resource at the given URL.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use stream_download::{Settings, StreamDownload, http::HttpStream};
+    /// use reqwest::Client;
+    /// use std::{io::Read, result::Result, error::Error};
+    ///
+    /// fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut reader = StreamDownload::new::<HttpStream<Client>>(
+    ///         "https://some-cool-url.com/some-file.mp3".parse()?,
+    ///         Settings::default(),
+    ///     )?;
+    ///
+    ///     let mut buf = Vec::new();
+    ///     reader.read_to_end(&mut buf)?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn new<S: SourceStream>(url: S::Url, settings: Settings) -> io::Result<Self> {
         Self::from_make_stream(move || S::create(url), settings)
     }
 
+    /// Creates a new [StreamDownload](StreamDownload) from a [SourceStream](crate::source::SourceStream).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use stream_download::{Settings, StreamDownload, http::HttpStream};
+    /// use reqwest::Client;
+    /// use std::{io::Read, result::Result, error::Error};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn Error>> {
+    ///     let stream = HttpStream::new(
+    ///         Client::new(),
+    ///         "https://some-cool-url.com/some-file.mp3".parse()?,
+    ///     )
+    ///     .await?;
+    ///
+    ///     let mut reader = StreamDownload::from_stream(stream, Settings::default())?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_stream<S: SourceStream>(stream: S, settings: Settings) -> Result<Self, io::Error> {
         Self::from_make_stream(move || future::ready(Ok(stream)), settings)
+    }
+
+    /// Cancels the background task that's downloading the stream content.
+    /// This has no effect if the download is already completed.
+    pub fn cancel_download(&self) {
+        self.download_task_cancellation_token.cancel();
     }
 
     fn from_make_stream<S, F, Fut>(make_stream: F, settings: Settings) -> Result<Self, io::Error>
@@ -81,7 +160,7 @@ impl StreamDownload {
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = io::Result<S>> + Send,
     {
-        let tempfile = if let Some(temp_dir) = &settings.temp_dir {
+        let tempfile = if let Some(temp_dir) = &settings.download_dir {
             NamedTempFile::new_in(temp_dir)?
         } else {
             NamedTempFile::new()?
@@ -126,10 +205,6 @@ impl StreamDownload {
             handle,
             download_task_cancellation_token: cancellation_token,
         })
-    }
-
-    pub fn cancel_download(&self) {
-        self.download_task_cancellation_token.cancel();
     }
 }
 

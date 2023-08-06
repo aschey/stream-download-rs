@@ -8,7 +8,9 @@
 
 [stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location and using it as a [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
 The file is downloaded in the background and you can perform read or seek operations before the download is finished.
-This is useful for media applications that need to stream large files that may take several seconds or minutes to finish downloading.
+This is useful for media applications that need to stream large files that may take several seconds or minutes to download.
+
+Read requests that attempt to access part of the stream that hasn't been downloaded yet will block until that part of the stream has completed downloading.
 
 HTTP is the only transport supplied by this library, but you can use a custom transport by implementing the `SourceStream` trait.
 
