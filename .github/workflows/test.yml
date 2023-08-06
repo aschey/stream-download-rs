@@ -36,7 +36,23 @@ jobs:
           fail_ci_if_error: true
           files: ./codecov.json
 
+  min-versions:
+    name: Check min dependency versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-minimal-versions
+        uses: taiki-e/install-action@cargo-minimal-versions
+      - name: Cargo minimal-versions
+        run: cargo minimal-versions check
+
   min-rust:
+    name: Check MSRV
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -45,5 +61,5 @@ jobs:
         with:
           toolchain: ${{ env.RUST_MIN }}
       - uses: Swatinem/rust-cache@v2
-      - name: "check MSRV"
+      - name: Cargo check
         run: cargo check --workspace --all-features
