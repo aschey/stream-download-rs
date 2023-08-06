@@ -29,7 +29,7 @@ cargo add stream-download
 - `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables the `reqwest` feature.
 - `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the `reqwest` feature.
 
-One of `http-native-tls` or `http-rustls` is required if you wish to use https streams.
+One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use https streams.
 
 ## Usage
 
