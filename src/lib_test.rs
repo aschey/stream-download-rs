@@ -396,10 +396,10 @@ async fn seek_basic(#[case] prefetch_bytes: u64) {
 
 #[rstest]
 #[tokio::test(flavor = "multi_thread")]
-async fn seek_start_end(
+async fn seek_all(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
-    #[values("start", "end")] seek_from1: &str,
-    #[values("start", "end")] seek_from2: &str,
+    #[values("start", "current", "end")] seek_from1: &str,
+    #[values("start", "current", "end")] seek_from2: &str,
     #[values(0, 1, 16, 2048)] seek_from_val1: u64,
     #[values(0, 1, 16, 2048)] seek_from_val2: u64,
 ) {
@@ -453,6 +453,10 @@ async fn seek_start_end(
         reader.seek(SeekFrom::Start(seek_from_val1)).unwrap();
     } else if seek_from1 == "end" {
         reader.seek(SeekFrom::End(seek_from_val1 as i64)).unwrap();
+    } else if seek_from1 == "current" {
+        reader
+            .seek(SeekFrom::Current(seek_from_val1 as i64))
+            .unwrap();
     }
 
     let mut buf1 = Vec::new();
@@ -462,6 +466,10 @@ async fn seek_start_end(
         reader.seek(SeekFrom::Start(seek_from_val2)).unwrap();
     } else if seek_from2 == "end" {
         reader.seek(SeekFrom::End(seek_from_val2 as i64)).unwrap();
+    } else if seek_from2 == "current" {
+        reader
+            .seek(SeekFrom::Current(-(seek_from_val2 as i64)))
+            .unwrap();
     }
 
     let mut buf2 = Vec::new();
@@ -469,7 +477,7 @@ async fn seek_start_end(
 
     let file_buf = get_file_buf();
 
-    if seek_from1 == "start" {
+    if seek_from1 == "start" || seek_from1 == "current" {
         assert_eq!(file_buf[seek_from_val1 as usize..], buf1);
     } else if seek_from1 == "end" {
         assert_eq!(file_buf[file_buf.len() - seek_from_val1 as usize..], buf1);
@@ -477,7 +485,7 @@ async fn seek_start_end(
 
     if seek_from2 == "start" {
         assert_eq!(file_buf[seek_from_val2 as usize..], buf2);
-    } else if seek_from2 == "end" {
+    } else if seek_from2 == "end" || seek_from2 == "current" {
         assert_eq!(file_buf[file_buf.len() - seek_from_val2 as usize..], buf2);
     }
 
