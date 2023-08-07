@@ -60,13 +60,15 @@ impl Settings {
     }
 }
 
-/// Represents content streamed from a remote source
+/// Represents content streamed from a remote source.
 /// This struct implements [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)
 /// so it can be used as a generic source for libraries and applications that operate on these traits.
 /// On creation, an async task is spawned that will immediately start to download the remote content.
 ///
 /// Any read attempts that request part of the stream that hasn't been downloaded yet will block until the requested portion is reached.
 /// Any seek attempts that meet the same criteria will result in additional request to restart the stream download from the seek point.
+///
+/// If the stream download hasn't completed when this struct is dropped, the task will be cancelled.
 #[derive(Debug)]
 pub struct StreamDownload {
     output_reader: BufReader<NamedTempFile>,
