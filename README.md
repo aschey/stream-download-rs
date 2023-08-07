@@ -1,5 +1,8 @@
 # stream-download-rs
 
+[![crates.io](https://img.shields.io/crates/v/stream-download.svg?logo=rust)](https://img.shields.io/crates/v/stream-download.svg)
+[![docs.rs](https://img.shields.io/docsrs/stream-download?logo=rust)](https://docs.rs/stream-download)
+[![Dependency Status](https://deps.rs/repo/github/aschey/stream-download-rs/status.svg?style=flat-square)](https://deps.rs/repo/github/aschey/stream-download-rs)
 ![license](https://img.shields.io/badge/License-MIT%20or%20Apache%202-green.svg)
 [![CI](https://github.com/aschey/stream-download-rs/actions/workflows/test.yml/badge.svg)](https://github.com/aschey/stream-download-rs/actions/workflows/build.yml)
 ![codecov](https://codecov.io/gh/aschey/stream-download-rs/branch/main/graph/badge.svg?token=Wx7OgIb0qa)
@@ -54,7 +57,7 @@ See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
 Resources such as standalone songs or videos have a known length that we use to support certain seeking functionality.
 Infinite streams or those that otherwise don't have a known length are still supported, but attempting to seek from the end of the stream will return an error.
 This may cause issues with certain audio or video libraries that attempt to perform such seek operations.
-If it's necessary to explicitly check for an infinite stream, you can check the stream's content length ahead of time. 
+If it's necessary to explicitly check for an infinite stream, you can check the stream's content length ahead of time.
 
 ```rust,no_run
 use stream_download::{Settings, StreamDownload, http::HttpStream, source::SourceStream};
