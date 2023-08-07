@@ -492,6 +492,33 @@ async fn seek_all(
     handle.await.unwrap();
 }
 
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+#[tokio::test(flavor = "multi_thread")]
+async fn cancel_download(#[case] prefetch_bytes: u64) {
+    let mut reader = StreamDownload::new_http(
+        format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            .parse()
+            .unwrap(),
+        Settings::default().prefetch_bytes(prefetch_bytes),
+    )
+    .unwrap();
+
+    let mut buf = [0; 1];
+    reader.read_exact(&mut buf).unwrap();
+    reader.cancel_download();
+
+    let mut buf = Vec::new();
+    reader.read_to_end(&mut buf).unwrap();
+
+    let file_buf = get_file_buf();
+    assert!(!buf.is_empty() && buf.len() < file_buf.len());
+    assert_eq!(file_buf[1..buf.len() + 1], buf);
+}
+
 fn get_file_buf() -> Vec<u8> {
     fs::read("./assets/music.mp3").unwrap()
 }

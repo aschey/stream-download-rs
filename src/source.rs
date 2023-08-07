@@ -240,6 +240,8 @@ impl Source {
                 },
                 _ = cancellation_token.cancelled() => {
                     debug!("received cancellation request, stopping download task");
+                    self.writer.flush()?;
+                    self.complete_download();
                     return Ok(());
                 }
             }
