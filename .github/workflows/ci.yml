@@ -88,3 +88,5 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@v1
       - name: Security vulnerabilities audit
         uses: rustsec/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
