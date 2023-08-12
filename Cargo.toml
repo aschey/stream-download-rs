@@ -49,5 +49,5 @@ rstest = "0.18.1"
 
 
 [[example]]
-name = "stream"
+name = "infinite_stream"
 required-features = ["reqwest-rustls"]

@@ -30,6 +30,10 @@ args = ["nextest", "run"]
 clear = true
 install_crate = "cargo-nextest"
 
+[tasks.open-docs]
+command = "cargo"
+args = ["doc", "--all-features", "--no-deps", "--open"]
+
 [tasks.watch-docs]
 command = "watchexec"
 args = [
