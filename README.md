@@ -25,7 +25,7 @@ cargo add stream-download
 
 ## Features
 
-- `http` - adds an HTTP-based implementation of the `SourceStream` trait, but still requires an external HTTP client (enabled by default).
+- `http` - adds an HTTP-based implementation of the [SourceStream](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait (enabled by default).
 - `reqwest` - enables streaming content over http using [reqwest](https://github.com/seanmonstar/reqwest) (enabled by default).
 - `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables the `reqwest` feature.
 - `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the `reqwest` feature.
