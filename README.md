@@ -50,23 +50,27 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
+## Examples
+
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
 
 ## Streams with Unknown Length
 
-Resources such as standalone songs or videos have a known length that we use to support certain seeking functionality.
+Resources such as standalone songs or videos have a finite length that we use to support certain seeking functionality.
 Infinite streams or those that otherwise don't have a known length are still supported, but attempting to seek from the end of the stream will return an error.
 This may cause issues with certain audio or video libraries that attempt to perform such seek operations.
 If it's necessary to explicitly check for an infinite stream, you can check the stream's content length ahead of time.
 
 ```rust,no_run
-use stream_download::{Settings, StreamDownload, http::HttpStream, source::SourceStream};
-use std::{io::Read, result::Result, error::Error};
-use reqwest::Client;
+use std::{error::Error, io::Read, result::Result};
+use stream_download::{
+    http::HttpStream, reqwest::client::Client, source::SourceStream, Settings, StreamDownload,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let stream = HttpStream::new(Client::new(), "https://some-cool-url.com/some-stream".parse()?).await?;
+    let stream =
+        HttpStream::<Client>::create("https://some-cool-url.com/some-stream".parse()?).await?;
     let content_length = stream.content_length();
     let is_infinite = content_length.is_none();
     println!("Infinite stream = {is_infinite}");

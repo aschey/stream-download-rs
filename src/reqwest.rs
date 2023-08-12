@@ -1,12 +1,16 @@
 //! An implementation of the [Client](crate::http::Client) trait using [reqwest](https://docs.rs/reqwest/latest/reqwest).
+//! If you need to customize the client object, you can use [HttpStream::new](crate::http::HttpStream::new) to supply
+//! your own reqwest client. Keep in mind that reqwest recommends creating a single client and cloning it for each new connection.
 
 use crate::http::{Client, ClientResponse};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
-use std::str::FromStr;
+use std::{str::FromStr, sync::OnceLock};
 use tap::TapFallible;
 use tracing::warn;
+
+pub use reqwest as client;
 
 impl ClientResponse for reqwest::Response {
     type Error = reqwest::Error;
@@ -41,6 +45,9 @@ impl ClientResponse for reqwest::Response {
     }
 }
 
+// per reqwest's docs, it's advisable to create a single client and reuse it
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
 #[async_trait]
 impl Client for reqwest::Client {
     type Url = reqwest::Url;
@@ -48,7 +55,7 @@ impl Client for reqwest::Client {
     type Error = reqwest::Error;
 
     fn create() -> Self {
-        reqwest::Client::new()
+        CLIENT.get_or_init(reqwest::Client::new).clone()
     }
 
     async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error> {

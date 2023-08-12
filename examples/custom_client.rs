@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, time::Duration};
 use stream_download::{
     http::HttpStream, reqwest::client::Client, source::SourceStream, Settings, StreamDownload,
 };
@@ -15,7 +15,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (_stream, handle) = rodio::OutputStream::try_default()?;
     let sink = rodio::Sink::try_new(&handle)?;
-    let stream = HttpStream::<Client>::create(
+
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .build()?;
+
+    let stream = HttpStream::new(
+        client,
         "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No 6 - Movement 2 Un poco andante.MP3".parse()?,
     )
     .await?;
