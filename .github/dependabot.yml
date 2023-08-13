@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
+      # tokio is quite stable, we don't need to update every minor version
+      - dependency-name: "tokio"
+        update-types: ["version-update:semver-minor"]
