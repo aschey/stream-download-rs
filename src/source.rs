@@ -1,31 +1,30 @@
-//! Provides the [SourceStream](SourceStream) trait which abstracts over the transport used to stream remote content.
+//! Provides the <SourceStream> trait which abstracts over the transport used to
+//! stream remote content.
+use std::error::Error;
+use std::fs::File;
+use std::io::{self, BufWriter, Seek, SeekFrom, Write};
+use std::ops::Range;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
 
-use crate::Settings;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use parking_lot::{Condvar, Mutex, RwLock, RwLockReadGuard};
 use rangemap::RangeSet;
-use std::{
-    error::Error,
-    fs::File,
-    io::{self, BufWriter, Seek, SeekFrom, Write},
-    ops::Range,
-    sync::{
-        atomic::{AtomicI64, Ordering},
-        Arc,
-    },
-    time::Instant,
-};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
-/// Represents a remote resource that can be streamed over the network.
-/// Streaming over http is implemented via the [HttpStream](crate::http::HttpStream) implementation
-/// if the `http` feature is enabled.
+use crate::Settings;
+
+/// Represents a remote resource that can be streamed over the network. Streaming
+/// over http is implemented via the [HttpStream](crate::http::HttpStream)
+/// implementation if the `http` feature is enabled.
 ///
-/// The implementation must also implement the [Stream](https://docs.rs/futures/latest/futures/stream/trait.Stream.html) trait.
+/// The implementation must also implement the
+/// [Stream](https://docs.rs/futures/latest/futures/stream/trait.Stream.html) trait.
 #[async_trait]
 pub trait SourceStream:
     Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync + Sized + 'static
@@ -39,13 +38,13 @@ pub trait SourceStream:
     /// Creates an instance of the stream.
     async fn create(url: Self::Url) -> io::Result<Self>;
 
-    /// Returns the size of the remote resource in bytes.
-    /// The result should be `None` if the stream is infinite or doesn't have a known length.
+    /// Returns the size of the remote resource in bytes. The result should be `None`
+    /// if the stream is infinite or doesn't have a known length.
     fn content_length(&self) -> Option<u64>;
 
-    /// Seeks to a specific position in the stream.
-    /// This method is only called if the requested range has not been downloaded,
-    /// so this method should jump to the requested position in the stream as quickly as possible.
+    /// Seeks to a specific position in the stream. This method is only called if the
+    /// requested range has not been downloaded, so this method should jump to the
+    /// requested position in the stream as quickly as possible.
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()>;
 }
 
@@ -174,8 +173,8 @@ impl Source {
             *mutex.lock() = true;
             cvar.notify_all();
         }
-
         let download_start = Instant::now();
+
         // Don't start prefetch if it's set to 0
         let mut prefetch_complete = self.settings.prefetch_bytes == 0;
         loop {
@@ -211,7 +210,11 @@ impl Source {
                         match self.prefetch(bytes).await? {
                             PrefetchResult::Continue => { },
                             PrefetchResult::Complete => {
-                                debug!(duration = format!("{:?}", download_start.elapsed()), "prefetch complete");
+                                debug!(
+                                    duration = format!("{:?}",
+                                    download_start.elapsed()),
+                                    "prefetch complete"
+                                );
                                 prefetch_complete = true;
                             },
                             PrefetchResult::EndOfFile => {
@@ -311,8 +314,8 @@ impl Source {
             "received response chunk"
         );
 
-        // RangeSet will panic if we try to insert a slice with 0 length.
-        // This could happen if the current chunk is empty.
+        // RangeSet will panic if we try to insert a slice with 0 length. This could
+        // happen if the current chunk is empty.
         if new_position > position {
             self.downloaded.write().insert(position..new_position);
         }

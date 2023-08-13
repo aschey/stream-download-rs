@@ -1,4 +1,5 @@
 use std::error::Error;
+
 use stream_download::{Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
 

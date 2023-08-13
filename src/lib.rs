@@ -4,13 +4,12 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![doc = include_str!("../README.md")]
 
+use std::future::{self, Future};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
+use std::path::PathBuf;
+use std::thread;
+
 use source::{Source, SourceHandle, SourceStream};
-use std::{
-    future::{self, Future},
-    io::{self, BufReader, Read, Seek, SeekFrom},
-    path::PathBuf,
-    thread,
-};
 use tap::{Tap, TapFallible};
 use tempfile::NamedTempFile;
 use tokio_util::sync::CancellationToken;
@@ -62,12 +61,15 @@ impl Settings {
 }
 
 /// Represents content streamed from a remote source.
-/// This struct implements [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)
-/// so it can be used as a generic source for libraries and applications that operate on these traits.
-/// On creation, an async task is spawned that will immediately start to download the remote content.
+/// This struct implements [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html)
+/// and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)
+/// so it can be used as a generic source for libraries and applications that operate on these
+/// traits. On creation, an async task is spawned that will immediately start to download the remote
+/// content.
 ///
-/// Any read attempts that request part of the stream that hasn't been downloaded yet will block until the requested portion is reached.
-/// Any seek attempts that meet the same criteria will result in additional request to restart the stream download from the seek point.
+/// Any read attempts that request part of the stream that hasn't been downloaded yet will block
+/// until the requested portion is reached. Any seek attempts that meet the same criteria will
+/// result in additional request to restart the stream download from the seek point.
 ///
 /// If the stream download hasn't completed when this struct is dropped, the task will be cancelled.
 #[derive(Debug)]
@@ -79,13 +81,17 @@ pub struct StreamDownload {
 
 impl StreamDownload {
     #[cfg(feature = "reqwest")]
-    /// Creates a new [StreamDownload](StreamDownload) that accesses an HTTP resource at the given URL.
+    /// Creates a new [StreamDownload](StreamDownload) that accesses an HTTP resource at the given
+    /// URL.
     ///
     /// # Example
     ///
     /// ```no_run
+    /// use std::error::Error;
+    /// use std::io::Read;
+    /// use std::result::Result;
+    ///
     /// use stream_download::{Settings, StreamDownload};
-    /// use std::{io::Read, result::Result, error::Error};
     ///
     /// fn main() -> Result<(), Box<dyn Error>> {
     ///     let mut reader = StreamDownload::new_http(
@@ -102,14 +108,19 @@ impl StreamDownload {
         Self::new::<http::HttpStream<::reqwest::Client>>(url, settings)
     }
 
-    /// Creates a new [StreamDownload](StreamDownload) that accesses a remote resource at the given URL.
+    /// Creates a new [StreamDownload](StreamDownload) that accesses a remote resource at the given
+    /// URL.
     ///
     /// # Example
     ///
     /// ```no_run
-    /// use stream_download::{Settings, StreamDownload, http::HttpStream};
+    /// use std::error::Error;
+    /// use std::io::Read;
+    /// use std::result::Result;
+    ///
     /// use reqwest::Client;
-    /// use std::{io::Read, result::Result, error::Error};
+    /// use stream_download::http::HttpStream;
+    /// use stream_download::{Settings, StreamDownload};
     ///
     /// fn main() -> Result<(), Box<dyn Error>> {
     ///     let mut reader = StreamDownload::new::<HttpStream<Client>>(
@@ -126,14 +137,19 @@ impl StreamDownload {
         Self::from_make_stream(move || S::create(url), settings)
     }
 
-    /// Creates a new [StreamDownload](StreamDownload) from a [SourceStream](crate::source::SourceStream).
+    /// Creates a new [StreamDownload](StreamDownload) from a
+    /// [SourceStream](crate::source::SourceStream).
     ///
     /// # Example
     ///
     /// ```no_run
-    /// use stream_download::{Settings, StreamDownload, http::HttpStream};
+    /// use std::error::Error;
+    /// use std::io::Read;
+    /// use std::result::Result;
+    ///
     /// use reqwest::Client;
-    /// use std::{io::Read, result::Result, error::Error};
+    /// use stream_download::http::HttpStream;
+    /// use stream_download::{Settings, StreamDownload};
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn Error>> {

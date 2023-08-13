@@ -1,25 +1,23 @@
-use std::{
-    fs,
-    io::{Read, Seek, SeekFrom},
-    net::SocketAddr,
-    pin::Pin,
-    sync::OnceLock,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::fs;
+use std::io::{Read, Seek, SeekFrom};
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::OnceLock;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
-use crate::{http, source::SourceStream, Settings, StreamDownload};
 use async_trait::async_trait;
 use bytes::Bytes;
 use ctor::ctor;
 use futures::{Stream, StreamExt};
 use rstest::rstest;
-use tokio::{
-    runtime::Runtime,
-    sync::{mpsc, oneshot},
-};
+use tokio::runtime::Runtime;
+use tokio::sync::{mpsc, oneshot};
 use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
+
+use crate::source::SourceStream;
+use crate::{http, Settings, StreamDownload};
 
 struct TestClient {
     inner: reqwest::Client,

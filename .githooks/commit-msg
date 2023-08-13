@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
 if !(command committed >/dev/null 2>&1); then
     echo Attempting to run committed as part of the pre-commit hooks but it\'s not installed.

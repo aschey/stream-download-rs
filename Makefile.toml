@@ -1,7 +1,7 @@
 [tasks.install-hooks]
 script = '''
 echo "Installing git hooks..."
-cp .githooks/commit-msg .git/hooks/commit-msg
+cp .githooks/* .git/hooks
 '''
 script_runner = "@shell"
 

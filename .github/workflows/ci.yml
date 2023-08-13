@@ -23,9 +23,7 @@ jobs:
         run: cargo build --no-default-features
       - name: Clippy
         run: |
-          # TODO finish docs and re-enable
-          # cargo clippy --all-features -- -D warnings
-          cargo clippy --all-features
+          cargo clippy --all-features -- -D warnings
       - name: Build all
         run: cargo build --all-features --examples
       - name: Install cargo-llvm-cov
@@ -82,8 +80,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          components: rustfmt
       - name: Check typos
         uses: crate-ci/typos@master
+      - name: rustfmt
+        run: cargo +nightly fmt --all --check
       - name: Lint dependencies
         uses: EmbarkStudios/cargo-deny-action@v1
       - name: Security vulnerabilities audit

@@ -1,37 +1,46 @@
 //! An HTTP implementation of the [SourceStream](crate::source::SourceStream) trait.
-//! An implementation of the [Client](Client) trait is required to perform the actual HTTP connection.
+//! An implementation of the [Client](Client) trait is required to perform the actual HTTP
+//! connection.
 //!
 //! # Example
 //!
 //! ```no_run
-//! use stream_download::{http::HttpStream, source::SourceStream};
-//! use std::{result::Result, error::Error};
+//! use std::error::Error;
+//! use std::result::Result;
+//!
 //! use reqwest::Client;
+//! use stream_download::http::HttpStream;
+//! use stream_download::source::SourceStream;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     let stream = HttpStream::new(Client::new(), "https://some-cool-url.com/some-file.mp3".parse()?).await?;
+//!     let stream = HttpStream::new(
+//!         Client::new(),
+//!         "https://some-cool-url.com/some-file.mp3".parse()?,
+//!     )
+//!     .await?;
 //!     let content_length = stream.content_length();
 //!     Ok(())
 //! }
 //! ```
 
-use crate::source::SourceStream;
+use std::error::Error;
+use std::fmt::Display;
+use std::io;
+use std::pin::Pin;
+use std::task::{self, Poll};
+use std::time::Instant;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
-use std::{
-    error::Error,
-    fmt::Display,
-    io,
-    pin::Pin,
-    task::{self, Poll},
-    time::Instant,
-};
 use tracing::{debug, instrument, warn};
 
-/// Wrapper trait for an HTTP client that exposes only functionality necessary for retrieving the stream content.
-/// If the `reqwest` feature is enabled, this trait is implemented for [reqwest::Client](https://docs.rs/reqwest/latest/reqwest/struct.Client.html).
+use crate::source::SourceStream;
+
+/// Wrapper trait for an HTTP client that exposes only functionality necessary for retrieving the
+/// stream content. If the `reqwest` feature is enabled, this trait is implemented for
+/// [reqwest::Client](https://docs.rs/reqwest/latest/reqwest/struct.Client.html).
 /// This can be implemented for a custom HTTP client if desired.
 #[async_trait]
 pub trait Client: Send + Sync + Unpin + 'static {
@@ -50,7 +59,8 @@ pub trait Client: Send + Sync + Unpin + 'static {
     /// Sends an HTTP GET request to the URL.
     async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error>;
 
-    /// Sends an HTTP GET request to the URL utilizing the `Range` header to request a specific part of the stream.
+    /// Sends an HTTP GET request to the URL utilizing the `Range` header to request a specific part
+    /// of the stream.
     async fn get_range(
         &self,
         url: &Self::Url,
@@ -59,8 +69,10 @@ pub trait Client: Send + Sync + Unpin + 'static {
     ) -> Result<Self::Response, Self::Error>;
 }
 
-/// A wrapper trait for an HTTP response that exposes only functionality necessary for retrieving the stream content.
-/// If the `reqwest` feature is enabled, this trait is implemented for [reqwest::Response](https://docs.rs/reqwest/latest/reqwest/struct.Response.html).
+/// A wrapper trait for an HTTP response that exposes only functionality necessary for retrieving
+/// the stream content. If the `reqwest` feature is enabled,
+/// this trait is implemented for
+/// [reqwest::Response](https://docs.rs/reqwest/latest/reqwest/struct.Response.html).
 /// This can be implemented for a custom HTTP response if desired.
 pub trait ClientResponse: Send + Sync {
     /// Error type returned by the underlying response stream.
@@ -144,7 +156,10 @@ impl<C: Client> SourceStream for HttpStream<C> {
     #[instrument(skip(self))]
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
         if Some(start) == self.content_length {
-            debug!("attempting to seek where start is the length of the stream, returning empty stream");
+            debug!(
+                "attempting to seek where start is the length of the stream, returning empty \
+                 stream"
+            );
             self.stream = Box::new(futures::stream::empty());
             return Ok(());
         }
