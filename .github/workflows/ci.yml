@@ -1,5 +1,15 @@
-on: [push, pull_request]
 name: CI
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  merge_group:
+
 env:
   BINSTALL_VERSION: 1.1.2
   RUST_MIN: 1.63
