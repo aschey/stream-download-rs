@@ -185,7 +185,10 @@ impl Source {
                             error!("Error fetching chunk from stream: {e:?}");
                             continue;
                         },
-                        Some(Ok(bytes)) => Some(bytes),
+                        Some(Ok(bytes)) => {
+                            trace!(chunk_size=bytes.len());
+                            Some(bytes)
+                        },
                         None => None,
                     };
 
@@ -310,7 +313,6 @@ impl Source {
         trace!(
             previous_position = position,
             new_position,
-            chunk_size = new_position - position,
             "received response chunk"
         );
 

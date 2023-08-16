@@ -104,6 +104,7 @@ impl http::Client for TestClient {
     type Url = reqwest::Url;
     type Response = TestResponse;
     type Error = reqwest::Error;
+    type Headers = reqwest::header::HeaderMap;
 
     fn create() -> Self {
         unimplemented!()
@@ -141,9 +142,18 @@ impl http::Client for TestClient {
 
 impl http::ClientResponse for TestResponse {
     type Error = reqwest::Error;
+    type Headers = reqwest::header::HeaderMap;
 
     fn content_length(&self) -> Option<u64> {
-        http::ClientResponse::content_length(&self.inner)
+        self.inner.content_length()
+    }
+
+    fn content_type(&self) -> Option<&str> {
+        self.inner.content_type()
+    }
+
+    fn headers(&self) -> Self::Headers {
+        http::ClientResponse::headers(&self.inner)
     }
 
     fn is_success(&self) -> bool {
@@ -250,6 +260,16 @@ async fn from_stream(#[case] prefetch_bytes: u64) {
 
     let file_buf = get_file_buf();
     assert_eq!(file_buf.len() as u64, stream.content_length().unwrap());
+    assert_eq!(
+        http::ContentType {
+            r#type: "audio".to_owned(),
+            subtype: "mpeg".to_owned()
+        },
+        stream.content_type().clone().unwrap()
+    );
+
+    assert_eq!("audio/mpeg", stream.header("Content-Type").unwrap());
+    assert_eq!("audio/mpeg", stream.headers().get("Content-Type").unwrap());
 
     let mut reader =
         StreamDownload::from_stream(stream, Settings::default().prefetch_bytes(prefetch_bytes))

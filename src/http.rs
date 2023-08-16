@@ -34,6 +34,7 @@ use std::time::Instant;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
+use mediatype::MediaTypeBuf;
 use tracing::{debug, instrument, warn};
 
 use crate::source::SourceStream;
@@ -47,8 +48,11 @@ pub trait Client: Send + Sync + Unpin + 'static {
     /// The HTTP URL of the remote resource.
     type Url: Display + Send + Sync + Unpin;
 
-    /// The HTTP Response object.
-    type Response: ClientResponse<Error = Self::Error>;
+    /// The type that contains the HTTP response headers.
+    type Headers: ResponseHeaders;
+
+    /// The HTTP response object.
+    type Response: ClientResponse<Error = Self::Error, Headers = Self::Headers>;
 
     /// The error type returned by HTTP requests.
     type Error: Error + Send + Sync;
@@ -69,6 +73,22 @@ pub trait Client: Send + Sync + Unpin + 'static {
     ) -> Result<Self::Response, Self::Error>;
 }
 
+/// Represents the content type HTTP response header
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContentType {
+    /// The top-level content type such as application, audio, video, etc.
+    pub r#type: String,
+    /// The specific subtype such as mpeg, mp4, ogg, etc.
+    pub subtype: String,
+}
+
+/// A trait for getting a specific header value
+pub trait ResponseHeaders: Send + Sync + Unpin {
+    /// Get a specific header from the response.
+    /// If the value is not present or it can't be decoded as a string, `None` is returned.
+    fn header(&self, name: &str) -> Option<&str>;
+}
+
 /// A wrapper trait for an HTTP response that exposes only functionality necessary for retrieving
 /// the stream content. If the `reqwest` feature is enabled,
 /// this trait is implemented for
@@ -77,10 +97,19 @@ pub trait Client: Send + Sync + Unpin + 'static {
 pub trait ClientResponse: Send + Sync {
     /// Error type returned by the underlying response stream.
     type Error;
+    /// Object containing HTTP response headers.
+    type Headers: ResponseHeaders;
 
-    /// Returns the size of the remote resource in bytes.
+    /// The size of the remote resource in bytes.
     /// The result should be `None` if the stream is infinite or doesn't have a known length.
     fn content_length(&self) -> Option<u64>;
+
+    /// The content-type response header.
+    /// This should be in the standard format of `<type>/<subtype>`.
+    fn content_type(&self) -> Option<&str>;
+
+    /// Object containing HTTP response headers.
+    fn headers(&self) -> Self::Headers;
 
     /// Checks if the response status is successful.
     fn is_success(&self) -> bool;
@@ -97,7 +126,9 @@ pub struct HttpStream<C: Client> {
     stream: Box<dyn Stream<Item = Result<Bytes, C::Error>> + Unpin + Send + Sync>,
     client: C,
     content_length: Option<u64>,
+    content_type: Option<ContentType>,
     url: C::Url,
+    headers: C::Headers,
 }
 
 impl<C: Client> HttpStream<C> {
@@ -115,20 +146,58 @@ impl<C: Client> HttpStream<C> {
             duration = format!("{:?}", request_start.elapsed()),
             "request finished"
         );
-        let mut content_length = None;
-        if let Some(length) = response.content_length() {
-            debug!(content_length = length, "received content length");
-            content_length = Some(length);
+
+        let content_length = if let Some(content_length) = response.content_length() {
+            debug!(content_length, "received content length");
+            Some(content_length)
         } else {
             warn!("content length header missing");
-        }
+            None
+        };
+
+        let content_type = if let Some(content_type) = response.content_type() {
+            debug!(content_type, "received content type");
+            match content_type.parse::<MediaTypeBuf>() {
+                Ok(content_type) => Some(ContentType {
+                    r#type: content_type.ty().to_string(),
+                    subtype: content_type.subty().to_string(),
+                }),
+                Err(e) => {
+                    warn!("error parsing content type: {e:?}");
+                    None
+                }
+            }
+        } else {
+            warn!("content type header missing");
+            None
+        };
+
+        let headers = response.headers();
         let stream = response.stream();
         Ok(Self {
             stream: Box::new(stream),
             client,
             content_length,
+            content_type,
+            headers,
             url,
         })
+    }
+
+    /// The [ContentType](ContentType) of the response stream.
+    pub fn content_type(&self) -> &Option<ContentType> {
+        &self.content_type
+    }
+
+    /// Get a specific header from the response.
+    /// If the value is not present or it can't be decoded as a string, `None` is returned.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.header(name)
+    }
+
+    /// Object containing HTTP response headers.
+    pub fn headers(&self) -> &C::Headers {
+        &self.headers
     }
 }
 

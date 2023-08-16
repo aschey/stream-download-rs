@@ -1,24 +1,43 @@
 use std::error::Error;
 
+use stream_download::http::HttpStream;
+use stream_download::reqwest::client::Client;
+use stream_download::source::SourceStream;
 use stream_download::{Settings, StreamDownload};
+use tracing::info;
+use tracing::metadata::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::default().add_directive("stream_download=trace".parse()?))
+        .with_env_filter(EnvFilter::default().add_directive(LevelFilter::INFO.into()))
         .with_line_number(true)
         .with_file(true)
         .init();
 
     let (_stream, handle) = rodio::OutputStream::try_default()?;
     let sink = rodio::Sink::try_new(&handle)?;
+    let stream = HttpStream::<Client>::create(
+        "https://us2.internet-radio.com/proxy/mattjohnsonradio?mp=/stream".parse()?,
+    )
+    .await?;
 
-    let reader = StreamDownload::new_http(
-        "https://us2.internet-radio.com/proxy/megatoncafe?mp=/stream".parse()?,
-        Settings::default(),
-    )?;
+    info!("content type={:?}", stream.content_type());
+    let bitrate: u64 = stream.header("Icy-Br").unwrap().parse().unwrap();
+    info!("bitrate={bitrate}");
+    // buffer 5 seconds of audio
+    // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
+    let prefetch_bytes = bitrate / 8 * 1024 * 5;
+    info!("prefetch bytes={prefetch_bytes}");
 
+    let reader =
+        StreamDownload::from_stream(stream, Settings::default().prefetch_bytes(prefetch_bytes))?;
     sink.append(rodio::Decoder::new(reader)?);
-    sink.sleep_until_end();
+
+    let handle = tokio::task::spawn_blocking(move || {
+        sink.sleep_until_end();
+    });
+    handle.await?;
     Ok(())
 }
