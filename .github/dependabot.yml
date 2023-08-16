@@ -12,3 +12,9 @@ updates:
       # tokio is quite stable, we don't need to update every minor version
       - dependency-name: "tokio"
         update-types: ["version-update:semver-minor"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore"
