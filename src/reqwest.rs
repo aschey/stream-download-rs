@@ -11,29 +11,44 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
 pub use reqwest as client;
+use reqwest::header::{self, AsHeaderName, HeaderMap};
 use tap::TapFallible;
 use tracing::warn;
 
-use crate::http::{Client, ClientResponse};
+use crate::http::{Client, ClientResponse, ResponseHeaders};
+
+impl ResponseHeaders for HeaderMap {
+    fn header(&self, name: &str) -> Option<&str> {
+        get_header_str(self, name)
+    }
+}
+
+fn get_header_str<K: AsHeaderName>(headers: &HeaderMap, key: K) -> Option<&str> {
+    headers.get(key).and_then(|val| {
+        val.to_str()
+            .tap_err(|e| warn!("error converting header value: {e:?}"))
+            .ok()
+    })
+}
 
 impl ClientResponse for reqwest::Response {
     type Error = reqwest::Error;
+    type Headers = HeaderMap;
 
     fn content_length(&self) -> Option<u64> {
-        if let Some(length) = self.headers().get(reqwest::header::CONTENT_LENGTH) {
-            let content_length = length
-                .to_str()
-                .tap_err(|e| warn!("error getting length response: {e:?}"))
-                .ok();
+        get_header_str(self.headers(), header::CONTENT_LENGTH).and_then(|content_length| {
+            u64::from_str(content_length)
+                .tap_err(|e| warn!("invalid content length value: {e:?}"))
+                .ok()
+        })
+    }
 
-            content_length.and_then(|l| {
-                u64::from_str(l)
-                    .tap_err(|e| warn!("invalid content length value: {e:?}"))
-                    .ok()
-            })
-        } else {
-            None
-        }
+    fn content_type(&self) -> Option<&str> {
+        get_header_str(self.headers(), header::CONTENT_TYPE)
+    }
+
+    fn headers(&self) -> Self::Headers {
+        self.headers().clone()
     }
 
     fn is_success(&self) -> bool {
@@ -57,6 +72,7 @@ impl Client for reqwest::Client {
     type Url = reqwest::Url;
     type Response = reqwest::Response;
     type Error = reqwest::Error;
+    type Headers = HeaderMap;
 
     fn create() -> Self {
         CLIENT.get_or_init(reqwest::Client::new).clone()

@@ -24,7 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .parse()?,
     )
     .await?;
-    info!("Content length={:?}", stream.content_length());
+
+    info!("content length={:?}", stream.content_length());
+    info!("content type={:?}", stream.content_type());
 
     let reader = StreamDownload::from_stream(stream, Settings::default())?;
     sink.append(rodio::Decoder::new(reader)?);
