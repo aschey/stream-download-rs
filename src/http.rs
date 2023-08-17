@@ -247,7 +247,10 @@ impl<C: Client> SourceStream for HttpStream<C> {
             if let Err(e) = response.status_error() {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
             } else {
-                unreachable!("unsuccessful response should return an error")
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "unknown error from HTTP range request",
+                ));
             }
         }
         self.stream = Box::new(response.stream());
