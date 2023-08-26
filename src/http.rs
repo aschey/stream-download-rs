@@ -1,6 +1,5 @@
-//! An HTTP implementation of the [SourceStream](crate::source::SourceStream) trait.
-//! An implementation of the [Client](Client) trait is required to perform the actual HTTP
-//! connection.
+//! An HTTP implementation of the [SourceStream] trait.
+//! An implementation of the [Client] trait is required to perform the actual HTTP connection.
 //!
 //! # Example
 //!
@@ -121,7 +120,7 @@ pub trait ClientResponse: Send + Sync {
     fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync>;
 }
 
-/// An HTTP implementation of the [SourceStream](crate::source::SourceStream) trait.
+/// An HTTP implementation of the [SourceStream] trait.
 pub struct HttpStream<C: Client> {
     stream: Box<dyn Stream<Item = Result<Bytes, C::Error>> + Unpin + Send + Sync>,
     client: C,
@@ -184,7 +183,7 @@ impl<C: Client> HttpStream<C> {
         })
     }
 
-    /// The [ContentType](ContentType) of the response stream.
+    /// The [ContentType] of the response stream.
     pub fn content_type(&self) -> &Option<ContentType> {
         &self.content_type
     }

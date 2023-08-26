@@ -37,10 +37,13 @@ clear = true
 install_crate = "cargo-nextest"
 
 [tasks.open-docs]
+env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", RUSTFLAGS = "--cfg docsrs" }
+toolchain = "nightly"
 command = "cargo"
 args = ["doc", "--all-features", "--no-deps", "--open"]
 
 [tasks.watch-docs]
+env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", RUSTFLAGS = "--cfg docsrs" }
 command = "watchexec"
 args = [
     "-r",
@@ -48,6 +51,7 @@ args = [
     "rs,md",
     "--",
     "cargo",
+    "+nightly",
     "doc",
     "--all-features",
     "--no-deps",

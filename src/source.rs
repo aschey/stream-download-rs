@@ -1,4 +1,4 @@
-//! Provides the <SourceStream> trait which abstracts over the transport used to
+//! Provides the [SourceStream] trait which abstracts over the transport used to
 //! stream remote content.
 use std::error::Error;
 use std::fs::File;

@@ -99,6 +99,12 @@ jobs:
         uses: crate-ci/typos@master
       - name: rustfmt
         run: cargo +nightly fmt --all --check
+      - name: Verify docs
+        run: cargo +nightly doc --no-deps --all-features
+        env:
+          RUSTFLAGS: --cfg docsrs
+          RUSTDOCFLAGS: --cfg docsrs -D warnings
+
       - name: Lint dependencies
         uses: EmbarkStudios/cargo-deny-action@v1
       - name: Security vulnerabilities audit

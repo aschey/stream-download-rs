@@ -52,3 +52,7 @@ rstest = "0.18.1"
 [[example]]
 name = "infinite_stream"
 required-features = ["reqwest-rustls"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
