@@ -108,8 +108,7 @@ impl StreamDownload {
         Self::new::<http::HttpStream<::reqwest::Client>>(url, settings)
     }
 
-    /// Creates a new [StreamDownload] that accesses a remote resource at the given
-    /// URL.
+    /// Creates a new [StreamDownload] that accesses a remote resource at the given URL.
     ///
     /// # Example
     ///

@@ -40,7 +40,14 @@ install_crate = "cargo-nextest"
 env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", RUSTFLAGS = "--cfg docsrs" }
 toolchain = "nightly"
 command = "cargo"
-args = ["doc", "--all-features", "--no-deps", "--open"]
+args = [
+    "doc",
+    "-Zunstable-options",
+    "-Zrustdoc-scrape-examples",
+    "--all-features",
+    "--no-deps",
+    "--open",
+]
 
 [tasks.watch-docs]
 env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", RUSTFLAGS = "--cfg docsrs" }
@@ -53,6 +60,8 @@ args = [
     "cargo",
     "+nightly",
     "doc",
+    "-Zunstable-options",
+    "-Zrustdoc-scrape-examples",
     "--all-features",
     "--no-deps",
 ]
