@@ -48,11 +48,27 @@ tower = { version = "0.4.13", features = ["make"] }
 ctor = "0.2.4"
 rstest = "0.18.1"
 
+[[example]]
+name = "basic_http"
+required-features = ["reqwest"]
+doc-scrape-examples = true
+
+[[example]]
+name = "custom_client"
+required-features = ["reqwest"]
+doc-scrape-examples = true
+
+[[example]]
+name = "from_stream"
+required-features = ["reqwest"]
+doc-scrape-examples = true
 
 [[example]]
 name = "infinite_stream"
 required-features = ["reqwest-rustls"]
+doc-scrape-examples = true
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
