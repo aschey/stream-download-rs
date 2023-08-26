@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
 use std::future::{self, Future};
@@ -81,8 +82,7 @@ pub struct StreamDownload {
 
 impl StreamDownload {
     #[cfg(feature = "reqwest")]
-    /// Creates a new [StreamDownload](StreamDownload) that accesses an HTTP resource at the given
-    /// URL.
+    /// Creates a new [StreamDownload] that accesses an HTTP resource at the given URL.
     ///
     /// # Example
     ///
@@ -108,7 +108,7 @@ impl StreamDownload {
         Self::new::<http::HttpStream<::reqwest::Client>>(url, settings)
     }
 
-    /// Creates a new [StreamDownload](StreamDownload) that accesses a remote resource at the given
+    /// Creates a new [StreamDownload] that accesses a remote resource at the given
     /// URL.
     ///
     /// # Example
@@ -137,8 +137,7 @@ impl StreamDownload {
         Self::from_make_stream(move || S::create(url), settings)
     }
 
-    /// Creates a new [StreamDownload](StreamDownload) from a
-    /// [SourceStream](crate::source::SourceStream).
+    /// Creates a new [StreamDownload] from a [SourceStream].
     ///
     /// # Example
     ///

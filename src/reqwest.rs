@@ -1,4 +1,4 @@
-//! An implementation of the [Client](crate::http::Client) trait
+//! An implementation of the [Client] trait
 //! using [reqwest](https://docs.rs/reqwest/latest/reqwest).
 //! If you need to customize the client object, you can use
 //! [HttpStream::new](crate::http::HttpStream::new) to supply your own reqwest client. Keep in mind
