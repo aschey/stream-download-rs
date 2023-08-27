@@ -9,12 +9,13 @@ script_runner = "@shell"
 install_crate = "cargo-nextest"
 
 [tasks.coverage]
+env = { RUST_LOG = "trace" }
 script = '''
 cargo llvm-cov nextest --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
 genhtml -o ./target/debug/coverage/ --show-details --highlight --ignore-errors source --legend ./target/debug/lcov.info
 '''
 clear = true
-install_crate = "cargo-llvm-cov"
+install_crate = { binary = "cargo-llvm-cov", rustup_component_name = "llvm-tools-preview" }
 dependencies = ["pre-coverage"]
 
 [tasks.view-coverage]
