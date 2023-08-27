@@ -3,6 +3,7 @@ use std::error::Error;
 use stream_download::http::HttpStream;
 use stream_download::reqwest::client::Client;
 use stream_download::source::SourceStream;
+use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 use tracing::info;
 use tracing::metadata::LevelFilter;
@@ -28,7 +29,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("content length={:?}", stream.content_length());
     info!("content type={:?}", stream.content_type());
 
-    let reader = StreamDownload::from_stream(stream, Settings::default())?;
+    let reader =
+        StreamDownload::from_stream(stream, TempStorageProvider::new(), Settings::default())
+            .await?;
     sink.append(rodio::Decoder::new(reader)?);
 
     let handle = tokio::task::spawn_blocking(move || {

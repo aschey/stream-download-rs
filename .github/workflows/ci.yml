@@ -11,7 +11,6 @@ on:
   merge_group:
 
 env:
-  BINSTALL_VERSION: 1.1.2
   RUST_MIN: 1.63
 
 jobs:
@@ -43,7 +42,7 @@ jobs:
       - name: Test
         run: |
           cargo test --doc
-          cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
+          RUST_LOG=trace cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:

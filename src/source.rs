@@ -1,8 +1,7 @@
 //! Provides the [SourceStream] trait which abstracts over the transport used to
 //! stream remote content.
 use std::error::Error;
-use std::fs::File;
-use std::io::{self, BufWriter, Seek, SeekFrom, Write};
+use std::io::{self, SeekFrom};
 use std::ops::Range;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
@@ -17,6 +16,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
+use crate::storage::StorageWriter;
 use crate::Settings;
 
 /// Represents a remote resource that can be streamed over the network. Streaming
@@ -65,8 +65,7 @@ pub(crate) struct SourceHandle {
     downloaded: Arc<RwLock<RangeSet<u64>>>,
     requested_position: Arc<AtomicI64>,
     position_reached: Arc<(Mutex<Waiter>, Condvar)>,
-    content_length_retrieved: Arc<(Mutex<bool>, Condvar)>,
-    content_length: Arc<AtomicI64>,
+    content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
 }
 
@@ -104,19 +103,7 @@ impl SourceHandle {
     }
 
     pub fn content_length(&self) -> Option<u64> {
-        let (mutex, cvar) = &*self.content_length_retrieved;
-        let mut done = mutex.lock();
-        if !*done {
-            debug!("content length not retrieved, waiting");
-            cvar.wait_while(&mut done, |done| !*done);
-        }
-        let length = self.content_length.load(Ordering::SeqCst);
-        debug!(content_length = length, "source content length");
-        if length > -1 {
-            Some(length as u64)
-        } else {
-            None
-        }
+        self.content_length
     }
 }
 
@@ -126,30 +113,28 @@ struct Waiter {
     stream_done: bool,
 }
 
-pub(crate) struct Source {
-    writer: BufWriter<File>,
+pub(crate) struct Source<W: StorageWriter> {
+    writer: W,
     downloaded: Arc<RwLock<RangeSet<u64>>>,
     requested_position: Arc<AtomicI64>,
     position_reached: Arc<(Mutex<Waiter>, Condvar)>,
-    content_length_retrieved: Arc<(Mutex<bool>, Condvar)>,
-    content_length: Arc<AtomicI64>,
+    content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     settings: Settings,
 }
 
-impl Source {
-    pub(crate) fn new(file: File, settings: Settings) -> Self {
+impl<H: StorageWriter> Source<H> {
+    pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
         Self {
-            writer: BufWriter::new(file),
+            writer,
             downloaded: Default::default(),
             requested_position: Arc::new(AtomicI64::new(-1)),
             position_reached: Default::default(),
-            content_length_retrieved: Default::default(),
             seek_tx,
             seek_rx,
-            content_length: Default::default(),
+            content_length,
             settings,
         }
     }
@@ -161,18 +146,7 @@ impl Source {
         cancellation_token: CancellationToken,
     ) -> io::Result<()> {
         debug!("starting file download");
-        let content_length = stream.content_length();
-        if let Some(content_length) = content_length {
-            self.content_length
-                .swap(content_length as i64, Ordering::SeqCst);
-        } else {
-            self.content_length.swap(-1, Ordering::SeqCst);
-        }
-        {
-            let (mutex, cvar) = &*self.content_length_retrieved;
-            *mutex.lock() = true;
-            cvar.notify_all();
-        }
+
         let download_start = Instant::now();
 
         // Don't start prefetch if it's set to 0
@@ -200,7 +174,7 @@ impl Source {
                                 download_duration = format!("{:?}", download_start.elapsed()),
                                 "stream finished downloading"
                             );
-                            match self.download_finish(&mut stream, content_length).await? {
+                            match self.download_finish(&mut stream, self.content_length).await? {
                                 DownloadFinishResult::ChunkMissing => {
                                     continue;
                                 },
@@ -257,6 +231,7 @@ impl Source {
     async fn prefetch(&mut self, bytes: Option<Bytes>) -> io::Result<PrefetchResult> {
         if let Some(bytes) = bytes {
             self.writer.write_all(&bytes)?;
+            self.writer.flush()?;
             let stream_position = self.writer.stream_position()?;
             trace!(
                 stream_position = stream_position,
@@ -309,6 +284,7 @@ impl Source {
     fn handle_response_chunk(&mut self, bytes: Bytes) -> io::Result<()> {
         let position = self.writer.stream_position()?;
         self.writer.write_all(&bytes)?;
+        self.writer.flush()?;
         let new_position = self.writer.stream_position()?;
         trace!(
             previous_position = position,
@@ -378,8 +354,7 @@ impl Source {
             requested_position: self.requested_position.clone(),
             position_reached: self.position_reached.clone(),
             seek_tx: self.seek_tx.clone(),
-            content_length_retrieved: self.content_length_retrieved.clone(),
-            content_length: self.content_length.clone(),
+            content_length: self.content_length,
         }
     }
 }
