@@ -1,16 +1,9 @@
-//! An implementation of the [Client] trait
-//! using [reqwest](https://docs.rs/reqwest/latest/reqwest).
-//! If you need to customize the client object, you can use
-//! [HttpStream::new](crate::http::HttpStream::new) to supply your own reqwest client. Keep in mind
-//! that reqwest recommends creating a single client and cloning it for each new connection.
-
 use std::str::FromStr;
 use std::sync::OnceLock;
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
-pub use reqwest as client;
 use reqwest::header::{self, AsHeaderName, HeaderMap};
 use tap::TapFallible;
 use tracing::warn;

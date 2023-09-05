@@ -74,7 +74,7 @@ use std::io::Read;
 use std::result::Result;
 
 use stream_download::http::HttpStream;
-use stream_download::reqwest::client::Client;
+use stream_download::http::reqwest::Client;
 use stream_download::source::SourceStream;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
