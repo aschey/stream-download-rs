@@ -27,6 +27,7 @@ cargo add stream-download
 - `reqwest` - enables streaming content over http using [reqwest](https://github.com/seanmonstar/reqwest) (enabled by default).
 - `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables the `reqwest` feature.
 - `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the `reqwest` feature.
+- `temp-storage` - adds a temporary file-based storage backend (enabled by default).
 
 One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use https streams.
 
@@ -129,7 +130,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 When using infinite streams which don't need to support seeking, it usually isn't desirable to let the underlying cache grow indefinitely if the stream may be running for a while.
 For these cases, you may want to use [bounded storage](https://docs.rs/stream-download/latest/stream_download/storage/bounded/index.html).
 Bounded storage uses a circular buffer which will overwrite the oldest contents once it fills up.
-
 
 ```rust,no_run
 use std::error::Error;

@@ -5,6 +5,7 @@ use std::io::{self, Read, Seek, Write};
 pub mod adaptive;
 pub mod bounded;
 pub mod memory;
+#[cfg(feature = "temp-storage")]
 pub mod temp;
 
 /// Creates a [StorageReader] based on the content length returned from the
