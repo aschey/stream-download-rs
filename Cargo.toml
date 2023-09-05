@@ -24,17 +24,18 @@ reqwest = { version = "0.11.10", features = [
     "stream",
 ], default-features = false, optional = true }
 tap = "1.0.1"
-tempfile = "3"
+tempfile = { version = "3", optional = true }
 tokio = { version = "1.23.1", features = ["sync", "macros", "rt"] }
 tokio-util = "0.7.1"
 tracing = "0.1.36"
 
 [features]
-default = ["reqwest"]
+default = ["reqwest", "temp-storage"]
 http = ["mediatype"]
 reqwest = ["http", "dep:reqwest"]
 reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
 reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
+temp-storage = ["tempfile"]
 
 [dev-dependencies]
 rodio = { version = "0.17.1", default-features = false, features = [
@@ -56,12 +57,12 @@ doc-scrape-examples = true
 
 [[example]]
 name = "custom_client"
-required-features = ["reqwest"]
+required-features = ["reqwest", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
 name = "from_stream"
-required-features = ["reqwest"]
+required-features = ["reqwest", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
@@ -71,7 +72,12 @@ doc-scrape-examples = true
 
 [[example]]
 name = "adaptive"
-required-features = ["reqwest-rustls"]
+required-features = ["reqwest-rustls", "temp-storage"]
+doc-scrape-examples = true
+
+[[example]]
+name = "memory_storage"
+required-features = ["reqwest"]
 doc-scrape-examples = true
 
 [package.metadata.docs.rs]
