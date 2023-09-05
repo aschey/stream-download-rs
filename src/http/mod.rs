@@ -1,5 +1,9 @@
 //! An HTTP implementation of the [SourceStream] trait.
-//! An implementation of the [Client] trait is required to perform the actual HTTP connection.
+//!
+//! An implementation of the [Client] trait using [reqwest](https://docs.rs/reqwest/latest/reqwest)
+//! is provided if the `request` feature is enabled. If you need to customize the client object, you
+//! can use [HttpStream::new](crate::http::HttpStream::new) to supply your own reqwest client. Keep
+//! in mind that reqwest recommends creating a single client and cloning it for each new connection.
 //!
 //! # Example
 //!
@@ -7,7 +11,7 @@
 //! use std::error::Error;
 //! use std::result::Result;
 //!
-//! use reqwest::Client;
+//! use stream_download::http::reqwest::Client;
 //! use stream_download::http::HttpStream;
 //! use stream_download::source::SourceStream;
 //!
@@ -34,9 +38,14 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
 use mediatype::MediaTypeBuf;
+#[cfg(feature = "reqwest")]
+pub use reqwest;
 use tracing::{debug, instrument, warn};
 
 use crate::source::SourceStream;
+
+#[cfg(feature = "reqwest")]
+mod reqwest_client;
 
 /// Wrapper trait for an HTTP client that exposes only functionality necessary for retrieving the
 /// stream content. If the `reqwest` feature is enabled, this trait is implemented for
