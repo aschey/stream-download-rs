@@ -11,7 +11,7 @@ on:
   merge_group:
 
 env:
-  RUST_MIN: 1.63
+  RUST_MIN: "1.70"
 
 jobs:
   test:
@@ -76,6 +76,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      # this interferes with the rust version that gets used
+      - name: remove toolchain
+        run: rm rust-toolchain.toml
       - name: Install Rust ${{ env.RUST_MIN }}
         uses: dtolnay/rust-toolchain@stable
         with:
