@@ -199,4 +199,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ## Supported Rust Versions
 
-The MSRV is currently `1.63.0`.
+The MSRV is currently `1.70.0`.
