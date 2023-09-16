@@ -3,7 +3,7 @@
 //! beyond that if required.
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use parking_lot::RwLock;
 
@@ -11,34 +11,29 @@ use super::{StorageProvider, StorageReader};
 
 /// Creates a [MemoryStorage] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
-pub struct MemoryStorageProvider {
-    inner: Arc<Mutex<Option<Arc<RwLock<Vec<u8>>>>>>,
-    written: Arc<Mutex<Option<Arc<AtomicUsize>>>>,
-}
+pub struct MemoryStorageProvider;
 
 impl StorageProvider for MemoryStorageProvider {
     type Reader = MemoryStorage;
     type Writer = MemoryStorage;
 
-    fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
         let inner = Arc::new(RwLock::new(vec![0; content_length.unwrap_or(0) as usize]));
-        *self.inner.lock().unwrap() = Some(inner.clone());
         let written = Arc::new(AtomicUsize::new(0));
-        *self.written.lock().unwrap() = Some(written.clone());
-        Ok(MemoryStorage {
+        let reader = MemoryStorage {
+            inner: inner.clone(),
+            pos: 0,
+            written: written.clone(),
+        };
+        let writer = MemoryStorage {
             inner,
             pos: 0,
             written,
-        })
-    }
-    fn writer(&self) -> io::Result<Self::Writer> {
-        let inner = self.inner.lock().unwrap();
-        let written = self.written.lock().unwrap();
-        Ok(MemoryStorage {
-            inner: inner.as_ref().unwrap().clone(),
-            pos: 0,
-            written: written.as_ref().unwrap().clone(),
-        })
+        };
+        Ok((reader, writer))
     }
 }
 

@@ -4,7 +4,6 @@
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 use tempfile::NamedTempFile;
 
@@ -15,7 +14,6 @@ use crate::WrapIoResult;
 #[derive(Default, Clone, Debug)]
 pub struct TempStorageProvider {
     storage_dir: Option<PathBuf>,
-    handle: Arc<Mutex<Option<File>>>,
 }
 
 impl TempStorageProvider {
@@ -24,7 +22,6 @@ impl TempStorageProvider {
     pub fn new() -> Self {
         Self {
             storage_dir: None,
-            handle: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -32,7 +29,6 @@ impl TempStorageProvider {
     pub fn new_in(path: impl Into<PathBuf>) -> Self {
         Self {
             storage_dir: Some(path.into()),
-            handle: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -41,7 +37,10 @@ impl StorageProvider for TempStorageProvider {
     type Reader = TempStorageReader;
     type Writer = File;
 
-    fn create_reader(&self, _content_length: Option<u64>) -> io::Result<Self::Reader> {
+    fn into_reader_writer(
+        self,
+        _content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
         let tempfile = if let Some(dir) = &self.storage_dir {
             NamedTempFile::new_in(dir)
         } else {
@@ -50,19 +49,13 @@ impl StorageProvider for TempStorageProvider {
         .wrap_err("error creating temp file")?;
 
         let handle = tempfile.reopen().wrap_err("error reopening temp file")?;
-        *self.handle.lock().unwrap() = Some(handle.try_clone().unwrap());
-        Ok(TempStorageReader {
+        let reader = TempStorageReader {
             reader: BufReader::new(tempfile),
-        })
-    }
-
-    fn writer(&self) -> io::Result<Self::Writer> {
-        let handle = self.handle.lock().unwrap();
-        handle
-            .as_ref()
-            .unwrap()
+        };
+        let writer = handle
             .try_clone()
-            .wrap_err("error cloning temporary file")
+            .wrap_err("error cloning temporary file")?;
+        Ok((reader, writer))
     }
 }
 

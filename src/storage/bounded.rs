@@ -27,7 +27,6 @@ where
 {
     inner: T,
     size: usize,
-    may_be_shared_info: Arc<Mutex<Option<Arc<Mutex<SharedInfo>>>>>,
 }
 
 impl<T> BoundedStorageProvider<T>
@@ -39,7 +38,6 @@ where
         Self {
             inner,
             size: size.get(),
-            may_be_shared_info: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -51,10 +49,12 @@ where
     type Reader = BoundedStorageReader<T::Reader>;
     type Writer = BoundedStorageWriter<T::Writer>;
 
-    fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
-        let inner = self
-            .inner
-            .create_reader(Some(content_length.unwrap_or(self.size as u64)))?;
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
+        let content_length = content_length.unwrap_or(self.size as u64);
+        let (reader, writer) = self.inner.into_reader_writer(Some(content_length))?;
         let shared_info = Arc::new(Mutex::new(SharedInfo {
             read: 0,
             written: 0,
@@ -62,24 +62,15 @@ where
             write_pos: 0,
             size: self.size,
         }));
-        dbg!("creating shared info");
-        *self.may_be_shared_info.lock() = Some(shared_info.clone());
-        dbg!(&self.may_be_shared_info);
-
-        Ok(BoundedStorageReader {
-            inner,
+        let reader = BoundedStorageReader {
+            inner: reader,
             shared_info: shared_info.clone(),
-        })
-    }
-
-    fn writer(&self) -> io::Result<Self::Writer> {
-        // compile_error!("todo fix crash here, shared info seems to be None...");
-        let shared_info = self.may_be_shared_info.lock();
-        dbg!(&shared_info);
-        Ok(BoundedStorageWriter {
-            inner: self.inner.writer()?,
-            shared_info: shared_info.as_ref().unwrap().clone(),
-        })
+        };
+        let writer = BoundedStorageWriter {
+            inner: writer,
+            shared_info,
+        };
+        Ok((reader, writer))
     }
 }
 

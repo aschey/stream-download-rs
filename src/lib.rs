@@ -201,8 +201,8 @@ impl<P: StorageProvider> StreamDownload<P> {
     {
         let stream = make_stream().await.wrap_err("error creating stream")?;
         let content_length = stream.content_length();
-        let storage = storage_provider.create_reader(content_length)?;
-        let source = Source::new(storage_provider.writer()?, content_length, settings);
+        let (reader, writer) = storage_provider.into_reader_writer(content_length)?;
+        let source = Source::new(writer, content_length, settings);
         let handle = source.source_handle();
         let cancellation_token = CancellationToken::new();
         let cancellation_token_ = cancellation_token.clone();
@@ -217,7 +217,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         });
 
         Ok(Self {
-            output_reader: storage,
+            output_reader: reader,
             handle,
             download_task_cancellation_token: cancellation_token,
         })
