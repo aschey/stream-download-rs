@@ -3,7 +3,7 @@
 //! beyond that if required.
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 
@@ -11,15 +11,33 @@ use super::{StorageProvider, StorageReader};
 
 /// Creates a [MemoryStorage] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
-pub struct MemoryStorageProvider {}
+pub struct MemoryStorageProvider {
+    inner: Arc<Mutex<Option<Arc<RwLock<Vec<u8>>>>>>,
+    written: Arc<Mutex<Option<Arc<AtomicUsize>>>>,
+}
 
 impl StorageProvider for MemoryStorageProvider {
     type Reader = MemoryStorage;
+    type Writer = MemoryStorage;
+
     fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
+        let inner = Arc::new(RwLock::new(vec![0; content_length.unwrap_or(0) as usize]));
+        *self.inner.lock().unwrap() = Some(inner.clone());
+        let written = Arc::new(AtomicUsize::new(0));
+        *self.written.lock().unwrap() = Some(written.clone());
         Ok(MemoryStorage {
-            inner: Arc::new(RwLock::new(vec![0; content_length.unwrap_or(0) as usize])),
+            inner,
             pos: 0,
-            written: Arc::new(AtomicUsize::new(0)),
+            written,
+        })
+    }
+    fn writer(&self) -> io::Result<Self::Writer> {
+        let inner = self.inner.lock().unwrap();
+        let written = self.written.lock().unwrap();
+        Ok(MemoryStorage {
+            inner: inner.as_ref().unwrap().clone(),
+            pos: 0,
+            written: written.as_ref().unwrap().clone(),
         })
     }
 }
@@ -32,16 +50,7 @@ pub struct MemoryStorage {
     written: Arc<AtomicUsize>,
 }
 
-impl StorageReader for MemoryStorage {
-    type Writer = Self;
-    fn writer(&self) -> io::Result<Self::Writer> {
-        Ok(Self {
-            inner: self.inner.clone(),
-            pos: 0,
-            written: self.written.clone(),
-        })
-    }
-}
+impl StorageReader for MemoryStorage {}
 
 impl Read for MemoryStorage {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {

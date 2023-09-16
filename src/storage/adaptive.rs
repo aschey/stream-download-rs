@@ -7,6 +7,7 @@
 
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 
 use super::bounded::{BoundedStorageProvider, BoundedStorageReader, BoundedStorageWriter};
 use super::{StorageProvider, StorageReader, StorageWriter};
@@ -19,6 +20,9 @@ where
 {
     size: NonZeroUsize,
     inner: T,
+    // refactoring reader/writer
+    // TODO remove after refactor merges reader/writer creation
+    bounded: Arc<Mutex<Option<BoundedStorageProvider<T>>>>,
 }
 
 impl<T> AdaptiveStorageProvider<T>
@@ -28,7 +32,11 @@ where
     /// Creates a new [AdaptiveStorageProvider]. The supplied size is used to construct a
     /// [BoundedStorageReader] when the stream doesn't have a known content length.
     pub fn new(inner: T, size: NonZeroUsize) -> Self {
-        Self { inner, size }
+        Self {
+            inner,
+            size,
+            bounded: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
@@ -46,15 +54,27 @@ where
     T: StorageProvider,
 {
     type Reader = AdaptiveStorageReader<T::Reader>;
+    type Writer = AdaptiveStorageWriter<T::Writer>;
 
     fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
         if let Some(content_length) = content_length {
+            *self.bounded.lock().unwrap() = None;
             Ok(AdaptiveStorageReader::Unbounded(
                 self.inner.create_reader(Some(content_length))?,
             ))
         } else {
             let provier = BoundedStorageProvider::new(self.inner.clone(), self.size);
-            Ok(AdaptiveStorageReader::Bounded(provier.create_reader(None)?))
+            let reader = AdaptiveStorageReader::Bounded(provier.create_reader(None)?);
+            *self.bounded.lock().unwrap() = Some(provier);
+            Ok(reader)
+        }
+    }
+    fn writer(&self) -> io::Result<Self::Writer> {
+        match self.bounded.lock().unwrap().as_ref() {
+            Some(provier) => {
+                Ok(AdaptiveStorageWriter::Bounded(provier.writer()?))
+            }
+            None => Ok(AdaptiveStorageWriter::Unbounded(self.inner.writer()?)),
         }
     }
 }
@@ -83,18 +103,7 @@ where
     }
 }
 
-impl<T> StorageReader for AdaptiveStorageReader<T>
-where
-    T: StorageReader,
-{
-    type Writer = AdaptiveStorageWriter<T::Writer>;
-    fn writer(&self) -> io::Result<Self::Writer> {
-        match self {
-            Self::Bounded(inner) => Ok(AdaptiveStorageWriter::Bounded(inner.writer()?)),
-            Self::Unbounded(inner) => Ok(AdaptiveStorageWriter::Unbounded(inner.writer()?)),
-        }
-    }
-}
+impl<T> StorageReader for AdaptiveStorageReader<T> where T: StorageReader {}
 
 /// Write handle created by an [AdaptiveStorageReader].
 #[derive(Debug)]
