@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use tempfile::NamedTempFile;
 
-use super::{StorageProvider, StorageReader};
+use super::StorageProvider;
 use crate::WrapIoResult;
 
 /// Creates a [TempStorageReader] backed by a temporary file
@@ -76,5 +76,3 @@ impl Seek for TempStorageReader {
         self.reader.seek(pos)
     }
 }
-
-impl StorageReader for TempStorageReader {}

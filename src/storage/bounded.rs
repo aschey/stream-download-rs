@@ -113,8 +113,6 @@ where
     }
 }
 
-impl<T> StorageReader for BoundedStorageReader<T> where T: StorageReader {}
-
 impl<T> Read for BoundedStorageReader<T>
 where
     T: StorageReader,

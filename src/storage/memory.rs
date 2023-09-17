@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use super::{StorageProvider, StorageReader};
+use super::StorageProvider;
 
 /// Creates a [MemoryStorage] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
@@ -44,8 +44,6 @@ pub struct MemoryStorage {
     pos: usize,
     written: Arc<AtomicUsize>,
 }
-
-impl StorageReader for MemoryStorage {}
 
 impl Read for MemoryStorage {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {

@@ -94,8 +94,6 @@ where
     }
 }
 
-impl<T> StorageReader for AdaptiveStorageReader<T> where T: StorageReader {}
-
 /// Write handle created by an [AdaptiveStorageReader].
 #[derive(Debug)]
 pub enum AdaptiveStorageWriter<T: StorageWriter> {
