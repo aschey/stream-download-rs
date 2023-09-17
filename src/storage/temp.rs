@@ -10,14 +10,14 @@ use tempfile::NamedTempFile;
 use super::StorageProvider;
 use crate::WrapIoResult;
 
-/// Creates a [TempStorageReader] backed by a temporary file
+/// Creates a [`TempStorageReader`] backed by a temporary file
 #[derive(Default, Clone, Debug)]
 pub struct TempStorageProvider {
     storage_dir: Option<PathBuf>,
 }
 
 impl TempStorageProvider {
-    /// Creates a new [TempStorageProvider] that creates temporary files in the OS-specific default
+    /// Creates a new [`TempStorageProvider`] that creates temporary files in the OS-specific default
     /// location.
     pub fn new() -> Self {
         Self {
@@ -25,7 +25,7 @@ impl TempStorageProvider {
         }
     }
 
-    /// Creates a new [TempStorageProvider] that creates temporary files in the specified location.
+    /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified location.
     pub fn new_in(path: impl Into<PathBuf>) -> Self {
         Self {
             storage_dir: Some(path.into()),
@@ -59,7 +59,7 @@ impl StorageProvider for TempStorageProvider {
     }
 }
 
-/// Reader created by a [TempStorageProvider]. Reads from a temporary file.
+/// Reader created by a [`TempStorageProvider`]. Reads from a temporary file.
 #[derive(Debug)]
 pub struct TempStorageReader {
     reader: BufReader<NamedTempFile>,

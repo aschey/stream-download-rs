@@ -69,7 +69,7 @@ pub struct StreamDownload<P: StorageProvider> {
 
 impl<P: StorageProvider> StreamDownload<P> {
     #[cfg(feature = "reqwest")]
-    /// Creates a new [StreamDownload] that accesses an HTTP resource at the given URL.
+    /// Creates a new [`StreamDownload`] that accesses an HTTP resource at the given URL.
     ///
     /// # Example
     ///
@@ -103,7 +103,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::new::<http::HttpStream<::reqwest::Client>>(url, storage_provider, settings).await
     }
 
-    /// Creates a new [StreamDownload] that accesses a remote resource at the given URL.
+    /// Creates a new [`StreamDownload`] that accesses a remote resource at the given URL.
     ///
     /// # Example
     ///
@@ -139,7 +139,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::from_make_stream(move || S::create(url), storage_provider, settings).await
     }
 
-    /// Creates a new [StreamDownload] from a [SourceStream].
+    /// Creates a new [`StreamDownload`] from a [`SourceStream`].
     ///
     /// # Example
     ///

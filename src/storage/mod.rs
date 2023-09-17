@@ -8,10 +8,9 @@ pub mod memory;
 #[cfg(feature = "temp-storage")]
 pub mod temp;
 
-/// Creates a [StorageReader] based on the content length returned from the
-/// [SourceStream](crate::source::SourceStream).And construct a writable handle.
+/// Creates a [`StorageReader`] and [`StorageWriter`] based on the content 
+/// length returned from the [`SourceStream`](crate::source::SourceStream). 
 /// The reader and writer must track their position in the stream independently.
-
 pub trait StorageProvider: Clone + Send {
     /// Source used to read from the underlying storage.
     type Reader: StorageReader;

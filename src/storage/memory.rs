@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 
 use super::StorageProvider;
 
-/// Creates a [MemoryStorage] with an initial size based on the supplied content length.
+/// Creates a [`MemoryStorage`] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
 pub struct MemoryStorageProvider;
 

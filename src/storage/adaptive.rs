@@ -11,7 +11,7 @@ use std::num::NonZeroUsize;
 use super::bounded::{BoundedStorageProvider, BoundedStorageReader, BoundedStorageWriter};
 use super::{StorageProvider, StorageReader, StorageWriter};
 
-/// Creates an [AdaptiveStorageReader] based in the supplied content length
+/// Creates an [`AdaptiveStorageReader`] based in the supplied content length
 #[derive(Clone, Debug)]
 pub struct AdaptiveStorageProvider<T>
 where
@@ -25,8 +25,8 @@ impl<T> AdaptiveStorageProvider<T>
 where
     T: StorageProvider,
 {
-    /// Creates a new [AdaptiveStorageProvider]. The supplied size is used to construct a
-    /// [BoundedStorageReader] when the stream doesn't have a known content length.
+    /// Creates a new [`AdaptiveStorageProvider`]. The supplied size is used to construct a
+    /// [`BoundedStorageReader`] when the stream doesn't have a known content length.
     pub fn new(inner: T, size: NonZeroUsize) -> Self {
         Self {
             inner,
@@ -35,7 +35,7 @@ where
     }
 }
 
-/// Reader created by an [AdaptiveStorageProvider].
+/// Reader created by an [`AdaptiveStorageProvider`].
 #[derive(Debug)]
 pub enum AdaptiveStorageReader<T: StorageReader> {
     /// Bounded reader used for infinite streams.
@@ -94,7 +94,7 @@ where
     }
 }
 
-/// Write handle created by an [AdaptiveStorageReader].
+/// Write handle created by an [`AdaptiveStorageReader`].
 #[derive(Debug)]
 pub enum AdaptiveStorageWriter<T: StorageWriter> {
     /// Bounded reader used for infinite streams.

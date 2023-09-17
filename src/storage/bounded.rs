@@ -19,7 +19,7 @@ use tracing::{debug, instrument, trace, warn};
 use super::{StorageProvider, StorageReader, StorageWriter};
 use crate::WrapIoResult;
 
-/// Creates a [BoundedStorageReader] with a fixed size.
+/// Creates a [`BoundedStorageReader`] with a fixed size.
 #[derive(Clone, Debug)]
 pub struct BoundedStorageProvider<T>
 where
@@ -33,7 +33,7 @@ impl<T> BoundedStorageProvider<T>
 where
     T: StorageProvider,
 {
-    /// Creates a new [BoundedStorageProvider] with the specified fixed buffer size.
+    /// Creates a new [`BoundedStorageProvider`] with the specified fixed buffer size.
     pub fn new(inner: T, size: NonZeroUsize) -> Self {
         Self {
             inner,
@@ -93,7 +93,7 @@ impl SharedInfo {
     }
 }
 
-/// Reader created by a [BoundedStorageProvider]. Reads from a fixed-size circular buffer.
+/// Reader created by a [`BoundedStorageProvider`]. Reads from a fixed-size circular buffer.
 pub struct BoundedStorageReader<T>
 where
     T: StorageReader,
@@ -214,7 +214,7 @@ where
     }
 }
 
-/// Write handle created by a [BoundedStorageReader]. Writes to a fixed-size circular buffer.
+/// Write handle created by a [`BoundedStorageReader`]. Writes to a fixed-size circular buffer.
 pub struct BoundedStorageWriter<T>
 where
     T: StorageWriter,
