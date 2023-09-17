@@ -28,10 +28,7 @@ where
     /// Creates a new [`AdaptiveStorageProvider`]. The supplied size is used to construct a
     /// [`BoundedStorageReader`] when the stream doesn't have a known content length.
     pub fn new(inner: T, size: NonZeroUsize) -> Self {
-        Self {
-            inner,
-            size,
-        }
+        Self { inner, size }
     }
 }
 
