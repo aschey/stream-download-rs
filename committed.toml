@@ -2,14 +2,11 @@
 
 # https://www.conventionalcommits.org
 style = "conventional"
-# disallow merge commits
-merge_commit = false
-# subject is not required to be capitalized
+# we can be lenient with formatting since we're going to squash merge anyway
+merge_commit = true
 subject_capitalized = false
-# subject should start with an imperative verb
-imperative_subject = true
-# subject should not end with a punctuation
-subject_not_punctuated = true
+imperative_subject = false
+subject_not_punctuated = false
 # disable line length
 line_length = 0
 # disable subject length
