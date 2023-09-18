@@ -124,12 +124,21 @@ pub(crate) struct Source<W: StorageWriter> {
     settings: Settings,
 }
 
+fn init_downloaded<H: StorageWriter>(writer: &H) -> Arc<RwLock<RangeSet<u64>>> {
+    if let Some(downloaded) = writer.downloaded() {
+        Arc::new(RwLock::new(downloaded))
+    } else {
+        Default::default()
+    }
+}
+
 impl<H: StorageWriter> Source<H> {
     pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
+        let downloaded = init_downloaded(&writer);
         Self {
             writer,
-            downloaded: Default::default(),
+            downloaded,
             requested_position: Arc::new(AtomicI64::new(-1)),
             position_reached: Default::default(),
             seek_tx,

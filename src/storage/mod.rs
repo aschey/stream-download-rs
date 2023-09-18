@@ -2,11 +2,15 @@
 //! Pre-configured implementations are available for memory and temporary file-based storage.
 use std::io::{self, Read, Seek, Write};
 
+use rangemap::RangeSet;
+
 pub mod adaptive;
 pub mod bounded;
 pub mod memory;
 #[cfg(feature = "temp-storage")]
 pub mod temp;
+// #[cfg(feature = "unstable-permanent-storage")]
+pub mod permanent;
 
 /// Creates a [`StorageReader`] and [`StorageWriter`] based on the content
 /// length returned from the [`SourceStream`](crate::source::SourceStream).
@@ -30,6 +34,10 @@ pub trait StorageReader: Read + Seek + Send {}
 impl<T> StorageReader for T where T: Read + Seek + Send {}
 
 /// Handle for writing to the underlying storage layer.
-pub trait StorageWriter: Write + Seek + Send + 'static {}
-
-impl<T> StorageWriter for T where T: Write + Seek + Send + 'static {}
+pub trait StorageWriter: Write + Seek + Send + 'static {
+    /// If the underlying storage can resume a download return progress
+    /// already made 
+    fn downloaded(&self) -> Option<RangeSet<u64>> {
+        None
+    }
+}

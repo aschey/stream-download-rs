@@ -130,3 +130,5 @@ where
         }
     }
 }
+
+impl<T: Send + Read + Seek +'static> StorageWriter for AdaptiveStorageWriter<T>;

@@ -279,32 +279,43 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
     }
 }
 
+#[instrument(skip(relative_pos), ret)]
+fn absolute_seek_pos(
+    relative_pos: SeekFrom,
+    content_length: Option<u64>,
+    current_pos: u64,
+) -> io::Result<u64> {
+    Ok(match relative_pos {
+        SeekFrom::Start(pos) => {
+            debug!(seek_position = pos, "seeking from start");
+            pos
+        }
+        SeekFrom::End(pos) => {
+            debug!(seek_position = pos, "seeking from end");
+            if let Some(length) = content_length {
+                (length as i64 - pos) as u64
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "cannot seek from end when content length is unknown",
+                ));
+            }
+        }
+        SeekFrom::Current(pos) => {
+            debug!(seek_position = pos, "seeking from current position");
+            (current_pos as i64 + pos) as u64
+        }
+    })
+}
+
 impl<P: StorageProvider> Seek for StreamDownload<P> {
     #[instrument(skip(self))]
     fn seek(&mut self, relative_pos: SeekFrom) -> io::Result<u64> {
-        let absolute_seek_pos = match relative_pos {
-            SeekFrom::Start(pos) => {
-                debug!(seek_position = pos, "seeking from start");
-                pos
-            }
-            SeekFrom::End(pos) => {
-                debug!(seek_position = pos, "seeking from end");
-                if let Some(length) = self.handle.content_length() {
-                    (length as i64 - pos) as u64
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot seek from end when content length is unknown",
-                    ));
-                }
-            }
-            SeekFrom::Current(pos) => {
-                debug!(seek_position = pos, "seeking from current position");
-                (self.output_reader.stream_position()? as i64 + pos) as u64
-            }
-        };
-
-        debug!(absolute_seek_pos, "absolute seek position");
+        let absolute_seek_pos = absolute_seek_pos(
+            relative_pos,
+            self.handle.content_length(),
+            self.output_reader.stream_position()?,
+        )?;
         if let Some(closest_set) = self.handle.downloaded().get(&absolute_seek_pos) {
             debug!(
                 downloaded_range = format!("{closest_set:?}"),
