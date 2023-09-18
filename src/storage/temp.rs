@@ -10,7 +10,8 @@ use tempfile::NamedTempFile;
 use super::StorageProvider;
 use crate::WrapIoResult;
 
-/// Creates a [`TempStorageReader`] backed by a temporary file
+/// Used to create a [`TempStorageReader`] and [`File`] for writing 
+/// backed by a temporary file
 #[derive(Default, Clone, Debug)]
 pub struct TempStorageProvider {
     storage_dir: Option<PathBuf>,
