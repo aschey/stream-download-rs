@@ -11,7 +11,7 @@ use std::num::NonZeroUsize;
 use super::bounded::{BoundedStorageProvider, BoundedStorageReader, BoundedStorageWriter};
 use super::{StorageProvider, StorageReader, StorageWriter};
 
-/// Creates an [AdaptiveStorageReader] based in the supplied content length
+/// Creates an [`AdaptiveStorageReader`] based in the supplied content length
 #[derive(Clone, Debug)]
 pub struct AdaptiveStorageProvider<T>
 where
@@ -25,14 +25,14 @@ impl<T> AdaptiveStorageProvider<T>
 where
     T: StorageProvider,
 {
-    /// Creates a new [AdaptiveStorageProvider]. The supplied size is used to construct a
-    /// [BoundedStorageReader] when the stream doesn't have a known content length.
+    /// Creates a new [`AdaptiveStorageProvider`]. The supplied size is used to construct a
+    /// [`BoundedStorageReader`] when the stream doesn't have a known content length.
     pub fn new(inner: T, size: NonZeroUsize) -> Self {
         Self { inner, size }
     }
 }
 
-/// Reader created by an [AdaptiveStorageProvider].
+/// Reader created by an [`AdaptiveStorageProvider`].
 #[derive(Debug)]
 pub enum AdaptiveStorageReader<T: StorageReader> {
     /// Bounded reader used for infinite streams.
@@ -46,15 +46,23 @@ where
     T: StorageProvider,
 {
     type Reader = AdaptiveStorageReader<T::Reader>;
+    type Writer = AdaptiveStorageWriter<T::Writer>;
 
-    fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
-        if let Some(content_length) = content_length {
-            Ok(AdaptiveStorageReader::Unbounded(
-                self.inner.create_reader(Some(content_length))?,
-            ))
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
+        if content_length.is_some() {
+            let (reader, writer) = self.inner.into_reader_writer(content_length)?;
+            let reader = AdaptiveStorageReader::Unbounded(reader);
+            let writer = AdaptiveStorageWriter::Unbounded(writer);
+            Ok((reader, writer))
         } else {
             let provier = BoundedStorageProvider::new(self.inner.clone(), self.size);
-            Ok(AdaptiveStorageReader::Bounded(provier.create_reader(None)?))
+            let (reader, writer) = provier.into_reader_writer(content_length)?;
+            let reader = AdaptiveStorageReader::Bounded(reader);
+            let writer = AdaptiveStorageWriter::Bounded(writer);
+            Ok((reader, writer))
         }
     }
 }
@@ -83,20 +91,7 @@ where
     }
 }
 
-impl<T> StorageReader for AdaptiveStorageReader<T>
-where
-    T: StorageReader,
-{
-    type Writer = AdaptiveStorageWriter<T::Writer>;
-    fn writer(&self) -> io::Result<Self::Writer> {
-        match self {
-            Self::Bounded(inner) => Ok(AdaptiveStorageWriter::Bounded(inner.writer()?)),
-            Self::Unbounded(inner) => Ok(AdaptiveStorageWriter::Unbounded(inner.writer()?)),
-        }
-    }
-}
-
-/// Write handle created by an [AdaptiveStorageReader].
+/// Write handle created by an [`AdaptiveStorageReader`].
 #[derive(Debug)]
 pub enum AdaptiveStorageWriter<T: StorageWriter> {
     /// Bounded reader used for infinite streams.

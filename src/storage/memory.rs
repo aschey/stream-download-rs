@@ -7,20 +7,33 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use super::{StorageProvider, StorageReader};
+use super::StorageProvider;
 
-/// Creates a [MemoryStorage] with an initial size based on the supplied content length.
+/// Creates a [`MemoryStorage`] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
-pub struct MemoryStorageProvider {}
+pub struct MemoryStorageProvider;
 
 impl StorageProvider for MemoryStorageProvider {
     type Reader = MemoryStorage;
-    fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
-        Ok(MemoryStorage {
-            inner: Arc::new(RwLock::new(vec![0; content_length.unwrap_or(0) as usize])),
+    type Writer = MemoryStorage;
+
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
+        let inner = Arc::new(RwLock::new(vec![0; content_length.unwrap_or(0) as usize]));
+        let written = Arc::new(AtomicUsize::new(0));
+        let reader = MemoryStorage {
+            inner: inner.clone(),
             pos: 0,
-            written: Arc::new(AtomicUsize::new(0)),
-        })
+            written: written.clone(),
+        };
+        let writer = MemoryStorage {
+            inner,
+            pos: 0,
+            written,
+        };
+        Ok((reader, writer))
     }
 }
 
@@ -30,17 +43,6 @@ pub struct MemoryStorage {
     inner: Arc<RwLock<Vec<u8>>>,
     pos: usize,
     written: Arc<AtomicUsize>,
-}
-
-impl StorageReader for MemoryStorage {
-    type Writer = Self;
-    fn writer(&self) -> io::Result<Self::Writer> {
-        Ok(Self {
-            inner: self.inner.clone(),
-            pos: 0,
-            written: self.written.clone(),
-        })
-    }
 }
 
 impl Read for MemoryStorage {

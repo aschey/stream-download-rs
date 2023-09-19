@@ -22,3 +22,7 @@ We use some nightly-only features with rustfmt. If you're using rust analyzer, y
 See [here](https://github.com/rust-lang/rust-analyzer/issues/3627).
 If you're using the command line, you can run `cargo +nightly fmt`.
 If you install the git hooks, these are checked before commit.
+
+## Required Dev Packages
+
+Tests have a transient dependency on the `alsa-sys` crate. That crate needs the `libasound2-dev` package installed on Debian based systems.

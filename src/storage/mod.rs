@@ -8,24 +8,26 @@ pub mod memory;
 #[cfg(feature = "temp-storage")]
 pub mod temp;
 
-/// Creates a [StorageReader] based on the content length returned from the
-/// [SourceStream](crate::source::SourceStream).
+/// Creates a [`StorageReader`] and [`StorageWriter`] based on the content
+/// length returned from the [`SourceStream`](crate::source::SourceStream).
+/// The reader and writer must track their position in the stream independently.
 pub trait StorageProvider: Clone + Send {
     /// Source used to read from the underlying storage.
     type Reader: StorageReader;
-    /// Builds the reader with the specified content length.
-    fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader>;
-}
-
-/// Trait used to read from a storage layer and construct a writable handle.
-/// The reader and writer must track their position in the stream independently.
-pub trait StorageReader: Read + Seek + Send {
     /// Handle that can write to the underlying storage.
     type Writer: StorageWriter;
 
-    /// Returns a handle that can write to the underlying storage.
-    fn writer(&self) -> io::Result<Self::Writer>;
+    /// Turn the provider into a reader and writer.
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)>;
 }
+
+/// Trait used to read from a storage layer
+pub trait StorageReader: Read + Seek + Send {}
+
+impl<T> StorageReader for T where T: Read + Seek + Send {}
 
 /// Handle for writing to the underlying storage layer.
 pub trait StorageWriter: Write + Seek + Send + 'static {}

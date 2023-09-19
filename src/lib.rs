@@ -9,7 +9,7 @@ use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom};
 
 use source::{Source, SourceHandle, SourceStream};
-use storage::{StorageProvider, StorageReader};
+use storage::StorageProvider;
 use tap::{Tap, TapFallible};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
@@ -69,7 +69,7 @@ pub struct StreamDownload<P: StorageProvider> {
 
 impl<P: StorageProvider> StreamDownload<P> {
     #[cfg(feature = "reqwest")]
-    /// Creates a new [StreamDownload] that accesses an HTTP resource at the given URL.
+    /// Creates a new [`StreamDownload`] that accesses an HTTP resource at the given URL.
     ///
     /// # Example
     ///
@@ -103,7 +103,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::new::<http::HttpStream<::reqwest::Client>>(url, storage_provider, settings).await
     }
 
-    /// Creates a new [StreamDownload] that accesses a remote resource at the given URL.
+    /// Creates a new [`StreamDownload`] that accesses a remote resource at the given URL.
     ///
     /// # Example
     ///
@@ -139,7 +139,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::from_make_stream(move || S::create(url), storage_provider, settings).await
     }
 
-    /// Creates a new [StreamDownload] from a [SourceStream].
+    /// Creates a new [`StreamDownload`] from a [`SourceStream`].
     ///
     /// # Example
     ///
@@ -201,8 +201,8 @@ impl<P: StorageProvider> StreamDownload<P> {
     {
         let stream = make_stream().await.wrap_err("error creating stream")?;
         let content_length = stream.content_length();
-        let storage = storage_provider.create_reader(content_length)?;
-        let source = Source::new(storage.writer()?, content_length, settings);
+        let (reader, writer) = storage_provider.into_reader_writer(content_length)?;
+        let source = Source::new(writer, content_length, settings);
         let handle = source.source_handle();
         let cancellation_token = CancellationToken::new();
         let cancellation_token_ = cancellation_token.clone();
@@ -217,7 +217,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         });
 
         Ok(Self {
-            output_reader: storage,
+            output_reader: reader,
             handle,
             download_task_cancellation_token: cancellation_token,
         })

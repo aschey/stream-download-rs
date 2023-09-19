@@ -19,7 +19,7 @@ use tracing::{debug, instrument, trace, warn};
 use super::{StorageProvider, StorageReader, StorageWriter};
 use crate::WrapIoResult;
 
-/// Creates a [BoundedStorageReader] with a fixed size.
+/// Creates a [`BoundedStorageReader`] with a fixed size.
 #[derive(Clone, Debug)]
 pub struct BoundedStorageProvider<T>
 where
@@ -33,7 +33,7 @@ impl<T> BoundedStorageProvider<T>
 where
     T: StorageProvider,
 {
-    /// Creates a new [BoundedStorageProvider] with the specified fixed buffer size.
+    /// Creates a new [`BoundedStorageProvider`] with the specified fixed buffer size.
     pub fn new(inner: T, size: NonZeroUsize) -> Self {
         Self {
             inner,
@@ -47,21 +47,30 @@ where
     T: StorageProvider,
 {
     type Reader = BoundedStorageReader<T::Reader>;
-    fn create_reader(&self, content_length: Option<u64>) -> io::Result<Self::Reader> {
-        let inner = self
-            .inner
-            .create_reader(Some(content_length.unwrap_or(self.size as u64)))?;
+    type Writer = BoundedStorageWriter<T::Writer>;
 
-        Ok(BoundedStorageReader {
-            inner,
-            shared_info: Arc::new(Mutex::new(SharedInfo {
-                read: 0,
-                written: 0,
-                read_pos: 0,
-                write_pos: 0,
-                size: self.size,
-            })),
-        })
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
+        let content_length = content_length.unwrap_or(self.size as u64);
+        let (reader, writer) = self.inner.into_reader_writer(Some(content_length))?;
+        let shared_info = Arc::new(Mutex::new(SharedInfo {
+            read: 0,
+            written: 0,
+            read_pos: 0,
+            write_pos: 0,
+            size: self.size,
+        }));
+        let reader = BoundedStorageReader {
+            inner: reader,
+            shared_info: shared_info.clone(),
+        };
+        let writer = BoundedStorageWriter {
+            inner: writer,
+            shared_info,
+        };
+        Ok((reader, writer))
     }
 }
 
@@ -84,7 +93,7 @@ impl SharedInfo {
     }
 }
 
-/// Reader created by a [BoundedStorageProvider]. Reads from a fixed-size circular buffer.
+/// Reader created by a [`BoundedStorageProvider`]. Reads from a fixed-size circular buffer.
 pub struct BoundedStorageReader<T>
 where
     T: StorageReader,
@@ -101,19 +110,6 @@ where
         f.debug_struct("BoundedStorageReader")
             .field("shared_info", &self.shared_info)
             .finish()
-    }
-}
-
-impl<T> StorageReader for BoundedStorageReader<T>
-where
-    T: StorageReader,
-{
-    type Writer = BoundedStorageWriter<T::Writer>;
-    fn writer(&self) -> io::Result<Self::Writer> {
-        Ok(BoundedStorageWriter {
-            inner: self.inner.writer()?,
-            shared_info: self.shared_info.clone(),
-        })
     }
 }
 
@@ -218,7 +214,7 @@ where
     }
 }
 
-/// Write handle created by a [BoundedStorageReader]. Writes to a fixed-size circular buffer.
+/// Write handle created by a [`BoundedStorageReader`]. Writes to a fixed-size circular buffer.
 pub struct BoundedStorageWriter<T>
 where
     T: StorageWriter,
