@@ -17,15 +17,14 @@ pub struct TempStorageProvider {
 }
 
 impl TempStorageProvider {
-    /// Creates a new [`TempStorageProvider`] that creates temporary files in the OS-specific default
-    /// location.
+    /// Creates a new [`TempStorageProvider`] that creates temporary files in the OS-specific
+    /// default location.
     pub fn new() -> Self {
-        Self {
-            storage_dir: None,
-        }
+        Self { storage_dir: None }
     }
 
-    /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified location.
+    /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified
+    /// location.
     pub fn new_in(path: impl Into<PathBuf>) -> Self {
         Self {
             storage_dir: Some(path.into()),

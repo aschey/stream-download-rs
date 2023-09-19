@@ -2,8 +2,9 @@
 //!
 //! An implementation of the [Client] trait using [reqwest](https://docs.rs/reqwest/latest/reqwest)
 //! is provided if the `request` feature is enabled. If you need to customize the client object, you
-//! can use [`HttpStream::new`](crate::http::HttpStream::new) to supply your own reqwest client. Keep
-//! in mind that reqwest recommends creating a single client and cloning it for each new connection.
+//! can use [`HttpStream::new`](crate::http::HttpStream::new) to supply your own reqwest client.
+//! Keep in mind that reqwest recommends creating a single client and cloning it for each new
+//! connection.
 //!
 //! # Example
 //!
