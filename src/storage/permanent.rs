@@ -12,6 +12,7 @@ use crate::StorageProvider;
 
 mod progress;
 use progress::Progress;
+use rangemap::RangeSet;
 
 use super::StorageWriter;
 
@@ -73,7 +74,7 @@ impl PermanentStorageProvider {
             Progress::restart(&self.path)
         } else {
             Progress::start_or_continue(&self.path)
-        };
+        }?;
 
         Ok((reader, writer, progress))
     }
@@ -88,12 +89,15 @@ impl StorageProvider for PermanentStorageProvider {
         content_length: Option<u64>,
     ) -> std::io::Result<(Self::Reader, Self::Writer)> {
         let (reader, writer, progress) = self.setup_files(content_length)?;
+        let initially_downloaded = progress.downloaded()?;
+
         Ok((
-            PermanentStorageReader {
-                reader,
-                progress: progress.clone(),
+            PermanentStorageReader { reader },
+            PermanentStorageWriter {
+                writer,
+                progress,
+                initially_downloaded,
             },
-            PermanentStorageWriter { writer, progress },
         ))
     }
 }
@@ -101,7 +105,6 @@ impl StorageProvider for PermanentStorageProvider {
 /// Reader created by a [`PermanentStorageProvider`]. Reads from a file on disk.
 pub struct PermanentStorageReader {
     reader: BufReader<fs::File>,
-    progress: Progress,
 }
 
 impl Read for PermanentStorageReader {
@@ -120,11 +123,12 @@ impl Seek for PermanentStorageReader {
 pub struct PermanentStorageWriter {
     writer: BufWriter<fs::File>,
     progress: Progress,
+    initially_downloaded: RangeSet<u64>,
 }
 
 impl StorageWriter for PermanentStorageWriter {
-    fn downloaded(&self) -> Option<rangemap::RangeSet<u64>> {
-        todo!()
+    fn downloaded(&self) -> rangemap::RangeSet<u64> {
+        self.initially_downloaded.clone()
     }
 }
 
@@ -140,7 +144,8 @@ impl Write for PermanentStorageWriter {
 
 impl Seek for PermanentStorageWriter {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        self.progress.note_seek(pos);
+        let curr = self.writer.stream_position()?;
+        self.progress.finish_section(curr)?;
         self.writer.seek(pos)
     }
 }

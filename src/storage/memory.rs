@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use super::StorageProvider;
+use super::{StorageProvider, StorageWriter};
 
 /// Creates a [`MemoryStorage`] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
@@ -90,3 +90,5 @@ impl Write for MemoryStorage {
         Ok(())
     }
 }
+
+impl StorageWriter for MemoryStorage {}

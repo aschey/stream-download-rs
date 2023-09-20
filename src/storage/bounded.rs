@@ -302,3 +302,5 @@ where
         Ok(new_pos as u64)
     }
 }
+
+impl<T: StorageWriter +'static> StorageWriter for BoundedStorageWriter<T> {}
