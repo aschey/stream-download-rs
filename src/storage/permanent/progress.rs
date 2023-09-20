@@ -53,12 +53,12 @@ impl Progress {
     }
 
     fn new(file_path: &Path, restart: bool) -> io::Result<Progress> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .truncate(restart)
             .open(progress_path(file_path))?;
-        remove_incomplete_writes(&mut file)?;
+
         if restart {
             todo!("init file")
         }
@@ -79,11 +79,4 @@ impl Progress {
 
 fn progress_path(file_path: &Path) -> PathBuf {
     file_path.join(".progress")
-}
-
-fn remove_incomplete_writes(file: &mut File) -> io::Result<()> {
-    let current_len = file.metadata()?.len();
-    let without_incomplete = current_len - current_len % SECTION_LENGTH as u64;
-    file.set_len(without_incomplete)?;
-    Ok(())
 }

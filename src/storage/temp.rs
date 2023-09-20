@@ -10,7 +10,7 @@ use tempfile::NamedTempFile;
 use super::{StorageProvider, StorageWriter};
 use crate::WrapIoResult;
 
-/// Used to create a [`TempStorageReader`] and [`File`] for writing 
+/// Used to create a [`TempStorageReader`] and [`File`] for writing
 /// backed by a temporary file
 #[derive(Default, Clone, Debug)]
 pub struct TempStorageProvider {
@@ -77,4 +77,3 @@ impl Seek for TempStorageReader {
         self.reader.seek(pos)
     }
 }
-
