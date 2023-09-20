@@ -131,4 +131,4 @@ where
     }
 }
 
-impl<T: StorageWriter +'static> StorageWriter for AdaptiveStorageWriter<T> {}
+impl<T: StorageWriter + 'static> StorageWriter for AdaptiveStorageWriter<T> {}

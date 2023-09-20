@@ -36,7 +36,7 @@ impl<T> StorageReader for T where T: Read + Seek + Send {}
 /// Handle for writing to the underlying storage layer.
 pub trait StorageWriter: Write + Seek + Send + 'static {
     /// If the underlying storage can resume a download return progress
-    /// already made 
+    /// already made
     fn downloaded(&self) -> RangeSet<u64> {
         RangeSet::new()
     }

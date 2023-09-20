@@ -303,4 +303,4 @@ where
     }
 }
 
-impl<T: StorageWriter +'static> StorageWriter for BoundedStorageWriter<T> {}
+impl<T: StorageWriter + 'static> StorageWriter for BoundedStorageWriter<T> {}
