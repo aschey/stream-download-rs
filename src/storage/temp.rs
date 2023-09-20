@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use tempfile::NamedTempFile;
 
-use super::StorageProvider;
+use super::{StorageProvider, StorageWriter};
 use crate::WrapIoResult;
 
 /// Used to create a [`TempStorageReader`] and [`File`] for writing 
@@ -33,6 +33,7 @@ impl TempStorageProvider {
     }
 }
 
+impl StorageWriter for File {}
 impl StorageProvider for TempStorageProvider {
     type Reader = TempStorageReader;
     type Writer = File;
@@ -76,3 +77,4 @@ impl Seek for TempStorageReader {
         self.reader.seek(pos)
     }
 }
+
