@@ -125,6 +125,29 @@ pub(crate) struct Source<W: StorageWriter> {
     settings: Settings,
 }
 
+pub struct Download {
+    prefetch_complete: bool,
+    download_all: bool,
+    status: Option<DownloadStatus>,
+}
+
+enum DownloadStatus {
+    Prefetch(PrefetchResult),
+    FinishOrSeek(DownloadFinishResult),
+    HandledChunk,
+    FetchError,
+}
+
+impl Download {
+    fn new(settings: &Settings) -> Self {
+        Self {
+            prefetch_complete: settings.prefetch_bytes == 0,
+            download_all: false,
+            status: None,
+        }
+    }
+}
+
 impl<H: StorageWriter> Source<H> {
     pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
@@ -149,86 +172,97 @@ impl<H: StorageWriter> Source<H> {
         cancellation_token: CancellationToken,
     ) -> io::Result<()> {
         // Don't start prefetch if it's set to 0
-        let mut prefetch_complete = self.settings.prefetch_bytes == 0;
+        let mut download = Download::new(&self.settings);
         loop {
             tokio::select! {
-                bytes = stream.next() => {
-                    let done = self.handle_bytes(&mut stream, &mut prefetch_complete, bytes).await?;
-                    if done {
-                        return Ok(())
-                    }
-                }
                 pos = self.seek_rx.recv() => {
-                    if let Some(pos) = pos {
-                        if self.should_seek(pos)? {
-                            prefetch_complete = true;
-                            self.seek(&mut stream, pos, None).await?;
-                        }
+                    let pos = pos.expect("one seek_tx kept in self, never drops");
+                    if self.should_seek(pos)? {
+                        download.prefetch_complete = true;
+                        self.seek(&mut stream, pos, None).await?;
                     }
+                    continue
                 },
+                bytes = stream.next() => {
+                    download.status = Some(
+                    self.handle_bytes(&mut stream,
+                         &mut download.prefetch_complete,
+                         false, bytes).await?);
+                }
                 _ = cancellation_token.cancelled() => {
                     self.writer.flush()?;
-                    self.complete_download();
-                    return Ok(());
+                    self.signal_download_complete();
+                    return Ok(())
                 }
+            };
+
+            use DownloadFinishResult as DR;
+            use DownloadStatus as DS;
+            use PrefetchResult as PR;
+
+            match download.status.as_ref().unwrap() {
+                DS::Prefetch(PR::Continue) => continue,
+                DS::Prefetch(PR::Complete) => continue,
+                DS::Prefetch(PR::EndOfFile) => break,
+                DS::FinishOrSeek(DR::Complete) => break,
+                DS::FinishOrSeek(DR::ChunkMissing) => continue,
+                DS::HandledChunk => continue,
+                DS::FetchError => continue
             }
         }
+        Ok(())
     }
 
-    // returns wether we are done or not
+    /// returns true if the stream is done downloading
     async fn handle_bytes<S: SourceStream, E: fmt::Debug>(
         &mut self,
         stream: &mut S,
         prefetch_complete: &mut bool,
+        download_all: bool,
         bytes: Option<Result<Bytes, E>>,
-    ) -> io::Result<bool> {
+    ) -> io::Result<DownloadStatus> {
         let bytes = match bytes.transpose() {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("Error fetching chunk from stream: {e:?}");
-                return Ok(true);
+                return Ok(DownloadStatus::FetchError);
             }
         };
 
-        if *prefetch_complete {
-            if let Some(bytes) = bytes {
-                self.handle_response_chunk(bytes)?;
-            } else {
-                if let DownloadFinishResult::Complete =
-                    self.download_finish(stream, self.content_length).await?
-                {
-                    return Ok(true);
-                }
+        if !*prefetch_complete {
+            let res = self.prefetch(bytes).await?;
+            if res == PrefetchResult::Complete {
+                *prefetch_complete = true;
             }
+            return Ok(DownloadStatus::Prefetch(res));
+        }
+
+        if let Some(bytes) = bytes {
+            self.handle_response_chunk(bytes)?;
+            Ok(DownloadStatus::HandledChunk)
         } else {
-            match self.prefetch(bytes).await? {
-                PrefetchResult::EndOfFile => return Ok(true),
-                PrefetchResult::Continue => (),
-                PrefetchResult::Complete => {
-                    *prefetch_complete = true;
-                }
-            }
-        };
-        Ok(false)
+            let res = self.finish_or_seek(stream, self.content_length).await?;
+            Ok(DownloadStatus::FinishOrSeek(res))
+        }
     }
 
     async fn prefetch(&mut self, bytes: Option<Bytes>) -> io::Result<PrefetchResult> {
         if let Some(bytes) = bytes {
             self.writer.write_all(&bytes)?;
             self.writer.flush()?;
-            let stream_position = self.writer.stream_position()?;
+            let new_stream_position = self.writer.stream_position()?;
             trace!(
-                stream_position = stream_position,
+                stream_position = new_stream_position,
                 prefetch_target = self.settings.prefetch_bytes,
                 progress = format!(
                     "{:.2}%",
-                    (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
+                    (new_stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
                 ),
                 "prefetch"
             );
 
-            if stream_position >= self.settings.prefetch_bytes {
-                self.downloaded.write().insert(0..stream_position);
+            if new_stream_position >= self.settings.prefetch_bytes {
+                self.downloaded.write().insert(0..new_stream_position);
                 Ok(PrefetchResult::Complete)
             } else {
                 Ok(PrefetchResult::Continue)
@@ -239,12 +273,13 @@ impl<H: StorageWriter> Source<H> {
             self.downloaded
                 .write()
                 .insert(0..self.writer.stream_position()?);
-            self.complete_download();
+            self.signal_download_complete();
             Ok(PrefetchResult::EndOfFile)
         }
     }
 
-    async fn download_finish<S: SourceStream>(
+    ///
+    async fn finish_or_seek<S: SourceStream>(
         &mut self,
         stream: &mut S,
         content_length: Option<u64>,
@@ -261,7 +296,7 @@ impl<H: StorageWriter> Source<H> {
             }
         }
         self.writer.flush()?;
-        self.complete_download();
+        self.signal_download_complete();
         Ok(DownloadFinishResult::Complete)
     }
 
@@ -326,7 +361,7 @@ impl<H: StorageWriter> Source<H> {
         gaps.next()
     }
 
-    fn complete_download(&self) {
+    fn signal_download_complete(&self) {
         let (mutex, cvar) = &*self.position_reached;
         (mutex.lock()).stream_done = true;
         cvar.notify_all();
