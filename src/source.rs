@@ -207,7 +207,7 @@ impl<H: StorageWriter> Source<H> {
                 DS::FinishOrSeek(DR::Complete) => break,
                 DS::FinishOrSeek(DR::ChunkMissing) => continue,
                 DS::HandledChunk => continue,
-                DS::FetchError => continue
+                DS::FetchError => continue,
             }
         }
         Ok(())
@@ -229,56 +229,33 @@ impl<H: StorageWriter> Source<H> {
             }
         };
 
-        if !*prefetch_complete {
-            let res = self.prefetch(bytes).await?;
-            if res == PrefetchResult::Complete {
-                *prefetch_complete = true;
-            }
-            return Ok(DownloadStatus::Prefetch(res));
-        }
-
         if let Some(bytes) = bytes {
-            self.handle_response_chunk(bytes)?;
-            Ok(DownloadStatus::HandledChunk)
-        } else {
+            if !*prefetch_complete {
+                self.writer.write_all(&bytes)?;
+                self.writer.flush()?;
+                let new_stream_position = self.writer.stream_position()?;
+                if new_stream_position >= self.settings.prefetch_bytes {
+                    self.downloaded.write().insert(0..new_stream_position);
+                    *prefetch_complete = true;
+                    Ok(DownloadStatus::Prefetch(PrefetchResult::Complete))
+                } else {
+                    Ok(DownloadStatus::Prefetch(PrefetchResult::Continue))
+                }
+            } else {
+                self.handle_response_chunk(bytes)?;
+                Ok(DownloadStatus::HandledChunk)
+            }
+        } else { // end of stream
+            if !*prefetch_complete { 
+                self.downloaded
+                    .write()
+                    .insert(0..self.writer.stream_position()?);
+            }
             let res = self.finish_or_seek(stream, self.content_length).await?;
             Ok(DownloadStatus::FinishOrSeek(res))
         }
     }
 
-    async fn prefetch(&mut self, bytes: Option<Bytes>) -> io::Result<PrefetchResult> {
-        if let Some(bytes) = bytes {
-            self.writer.write_all(&bytes)?;
-            self.writer.flush()?;
-            let new_stream_position = self.writer.stream_position()?;
-            trace!(
-                stream_position = new_stream_position,
-                prefetch_target = self.settings.prefetch_bytes,
-                progress = format!(
-                    "{:.2}%",
-                    (new_stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
-                ),
-                "prefetch"
-            );
-
-            if new_stream_position >= self.settings.prefetch_bytes {
-                self.downloaded.write().insert(0..new_stream_position);
-                Ok(PrefetchResult::Complete)
-            } else {
-                Ok(PrefetchResult::Continue)
-            }
-        } else {
-            debug!("file shorter than prefetch length, download finished");
-            self.writer.flush()?;
-            self.downloaded
-                .write()
-                .insert(0..self.writer.stream_position()?);
-            self.signal_download_complete();
-            Ok(PrefetchResult::EndOfFile)
-        }
-    }
-
-    ///
     async fn finish_or_seek<S: SourceStream>(
         &mut self,
         stream: &mut S,
@@ -305,11 +282,6 @@ impl<H: StorageWriter> Source<H> {
         self.writer.write_all(&bytes)?;
         self.writer.flush()?;
         let new_position = self.writer.stream_position()?;
-        trace!(
-            previous_position = position,
-            new_position,
-            "received response chunk"
-        );
 
         // RangeSet will panic if we try to insert a slice with 0 length. This could
         // happen if the current chunk is empty.
@@ -318,13 +290,7 @@ impl<H: StorageWriter> Source<H> {
         }
         let requested = self.requested_position.load(Ordering::SeqCst);
         if requested > -1 {
-            debug!(
-                requested_position = requested,
-                current_position = new_position,
-                "received requested position"
-            );
             if new_position as i64 >= requested {
-                debug!("requested position reached, notifying");
                 self.requested_position.store(-1, Ordering::SeqCst);
                 let (mutex, cvar) = &*self.position_reached;
                 (mutex.lock()).position_reached = true;
