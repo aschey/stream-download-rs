@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         stream,
         // use bounded storage to keep the underlying size from growing indefinitely
         BoundedStorageProvider::new(
-            MemoryStorageProvider::default(),
+            MemoryStorageProvider,
             // be liberal with the buffer size, you need to make sure it holds enough space to
             // prevent any out-of-bounds reads
             NonZeroUsize::new(512 * 1024).unwrap(),

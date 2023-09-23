@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
          No 6 - Movement 2 Un poco andante.MP3"
             .parse()?,
-        MemoryStorageProvider::default(),
+        MemoryStorageProvider,
         Settings::default(),
     )
     .await?;

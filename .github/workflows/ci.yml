@@ -32,7 +32,7 @@ jobs:
         run: cargo build --no-default-features
       - name: Clippy
         run: |
-          cargo clippy --all-features -- -D warnings
+          cargo clippy --all-features --examples -- -D warnings
       - name: Build all
         run: cargo build --all-features --examples
       - name: Install cargo-llvm-cov
