@@ -50,7 +50,7 @@ proptest! {
                 format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                     .parse()
                     .unwrap(),
-                BoundedStorageProvider::new(MemoryStorageProvider::default(),
+                BoundedStorageProvider::new(MemoryStorageProvider,
                     NonZeroUsize::new(bounded_size).unwrap()),
                 Settings::default().prefetch_bytes(prefetch_bytes),
             )
