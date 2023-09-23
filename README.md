@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut reader = StreamDownload::new_http(
         "https://some-cool-url.com/some-file.mp3".parse()?,
         // buffer will be stored in memory instead of on disk
-        MemoryStorageProvider::default(),
+        MemoryStorageProvider,
         Settings::default(),
     )
     .await?;
@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // use bounded storage to keep the underlying size from growing indefinitely
         BoundedStorageProvider::new(
             // you can use any other kind of storage provider here
-            MemoryStorageProvider::default(),
+            MemoryStorageProvider,
             // be liberal with the buffer size, you need to make sure it holds enough space to
             // prevent any out-of-bounds reads
             NonZeroUsize::new(512 * 1024).unwrap(),

@@ -287,8 +287,8 @@ fn from_stream(#[case] prefetch_bytes: u64) {
 #[rstest]
 fn basic_download(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider::default())]
-    storage: impl StorageProvider + 'static,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
         let mut reader = StreamDownload::new_http(
@@ -339,8 +339,8 @@ fn temp_dir() {
 
 fn slow_download(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider::default())]
-    storage: impl StorageProvider + 'static,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
@@ -392,8 +392,7 @@ fn slow_download(
 fn bounded(
     #[values(0, 1, 128*1024-1, 128*1024)] prefetch_bytes: u64,
     #[values(256*1024, 300*1024)] bounded_length: usize,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider::default())]
-    storage: impl StorageProvider,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider,
 ) {
     let buf = SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
@@ -457,8 +456,8 @@ fn adaptive(
     #[values(0, 1, 128*1024-1, 128*1024)] prefetch_bytes: u64,
     #[values(256, 1024, 128*1024)] buf_size: usize,
     #[values(true, false)] has_content_length: bool,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider::default())]
-    storage: impl StorageProvider + 'static,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
 ) {
     let buf = SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
@@ -540,7 +539,7 @@ fn bounded_seek_near_beginning() {
             .await
             .unwrap(),
             BoundedStorageProvider::new(
-                MemoryStorageProvider::default(),
+                MemoryStorageProvider,
                 NonZeroUsize::new(256 * 1024).unwrap(),
             ),
             Settings::default().prefetch_bytes(0),
@@ -573,8 +572,8 @@ fn bounded_seek_near_beginning() {
 #[rstest]
 fn seek_basic(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider::default())]
-    storage: impl StorageProvider + 'static,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
@@ -634,8 +633,8 @@ fn seek_all(
     #[values("start", "current", "end")] seek_from2: &'static str,
     #[values(0, 1, 16, 2048)] seek_from_val1: u64,
     #[values(0, 1, 16, 2048)] seek_from_val2: u64,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider::default())]
-    storage: impl StorageProvider + 'static,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
