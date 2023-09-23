@@ -552,6 +552,7 @@ fn bounded_seek_near_beginning() {
         let mut prev_size = 0;
         while let Some((command, responder)) = rx.recv().await {
             if let Command::NextChunk(size) = command {
+                responder.send(Duration::from_millis(0)).ok();
                 let mut temp_buf = vec![0; size - prev_size];
                 if size > bounded_size {
                     reader.rewind().unwrap();
@@ -565,7 +566,6 @@ fn bounded_seek_near_beginning() {
 
                 prev_size = size;
             }
-            responder.send(Duration::from_millis(0)).ok();
         }
     });
 }
