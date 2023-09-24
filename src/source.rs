@@ -171,7 +171,7 @@ pub(crate) struct Source<W: StorageWriter> {
     settings: Settings,
 }
 
-pub struct Download {
+struct Download {
     prefetch_complete: bool,
     download_all: bool,
     status: Option<DownloadStatus>,
@@ -276,35 +276,29 @@ impl<H: StorageWriter> Source<H> {
 
         if let Some(bytes) = bytes {
             if bytes.is_empty() {
+                // needed as empty section lead to panic in rangemap
                 return Ok(DownloadStatus::HandledChunk);
             }
 
-            if !*prefetch_complete {
-                let position = 0;
-                self.writer.write_all(&bytes)?;
-                self.writer.flush()?;
-                let new_position = self.writer.stream_position()?;
-                if new_position >= self.settings.prefetch_bytes {
-                    self.downloaded.write().insert(position..new_position);
-                    *prefetch_complete = true;
-                    Ok(DownloadStatus::Prefetch(PrefetchResult::Complete))
-                } else {
-                    Ok(DownloadStatus::Prefetch(PrefetchResult::Continue))
-                }
+            let position = if *prefetch_complete {
+                self.writer.stream_position()?
             } else {
-                let position = self.writer.stream_position()?;
-                self.writer.write_all(&bytes)?;
-                self.writer.flush()?;
-                let new_position = self.writer.stream_position()?;
-                self.downloaded.write().insert(position..new_position); // todo PR checked
+                0
+            };
+            self.writer.write_all(&bytes)?;
+            self.writer.flush()?;
+            let new_position = self.writer.stream_position()?;
+            *prefetch_complete |= new_position >= self.settings.prefetch_bytes;
+            if *prefetch_complete {
+                self.downloaded.write().insert(position..new_position);
                 if let Some(requested) = self.requested_position.get() {
                     if new_position >= requested {
                         self.requested_position.clear();
                         self.position_reached.notify_position_reached()
                     }
                 }
-                Ok(DownloadStatus::HandledChunk)
             }
+            Ok(DownloadStatus::HandledChunk)
         } else {
             // end of stream
             if !*prefetch_complete {
