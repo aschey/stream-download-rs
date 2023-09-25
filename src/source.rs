@@ -268,41 +268,41 @@ impl<H: StorageWriter> Source<H> {
             }
         };
 
-        if let Some(bytes) = bytes {
-            if bytes.is_empty() {
-                // needed as empty section lead to panic in rangemap
-                return Ok(DownloadStatus::Continue);
-            }
-
-            let position = if *prefetch_complete {
-                self.writer.stream_position()?
-            } else {
-                0
-            };
-
-            self.writer.write_all(&bytes)?;
-            self.writer.flush()?;
-
-            let new_position = self.writer.stream_position()?;
-            *prefetch_complete |= new_position >= self.settings.prefetch_bytes;
-
-            if *prefetch_complete {
-                self.downloaded.add(position..new_position);
-                if let Some(requested) = self.requested_position.get() {
-                    if new_position >= requested {
-                        self.requested_position.clear();
-                        self.position_reached.notify_position_reached()
-                    }
-                }
-            }
-            Ok(DownloadStatus::Continue)
-        } else {
+        let Some(bytes) = bytes else {
             // end of stream
             if !*prefetch_complete {
                 self.downloaded.add(0..self.writer.stream_position()?);
             }
-            self.finish_or_seek(stream, self.content_length).await
+            return self.finish_or_seek(stream, self.content_length).await;
+        };
+
+        if bytes.is_empty() {
+            // needed as empty section lead to panic in rangemap
+            return Ok(DownloadStatus::Continue);
         }
+
+        let position = if *prefetch_complete {
+            self.writer.stream_position()?
+        } else {
+            0
+        };
+
+        self.writer.write_all(&bytes)?;
+        self.writer.flush()?;
+
+        let new_position = self.writer.stream_position()?;
+        *prefetch_complete |= new_position >= self.settings.prefetch_bytes;
+
+        if *prefetch_complete {
+            self.downloaded.add(position..new_position);
+            if let Some(requested) = self.requested_position.get() {
+                if new_position >= requested {
+                    self.requested_position.clear();
+                    self.position_reached.notify_position_reached()
+                }
+            }
+        }
+        Ok(DownloadStatus::Continue)
     }
 
     async fn finish_or_seek<S: SourceStream>(
