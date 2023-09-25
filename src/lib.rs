@@ -241,7 +241,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
             requested_position = requested_position
         );
 
-        if let Some(closest_set) = self.handle.downloaded().get(&stream_position) {
+        if let Some(closest_set) = self.handle.get_downloaded_around(stream_position) {
             trace!(
                 downloaded_range = format!("{closest_set:?}"),
                 "current position already downloaded"
@@ -316,7 +316,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
             self.handle.content_length(),
             self.output_reader.stream_position()?,
         )?;
-        if let Some(closest_set) = self.handle.downloaded().get(&absolute_seek_pos) {
+        if let Some(closest_set) = self.handle.get_downloaded_around(absolute_seek_pos) {
             debug!(
                 downloaded_range = format!("{closest_set:?}"),
                 "seek position already downloaded"
