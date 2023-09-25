@@ -10,7 +10,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use parking_lot::{Condvar, Mutex, RwLock, RwLockReadGuard};
+use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -48,21 +48,9 @@ pub trait SourceStream:
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()>;
 }
 
-#[derive(PartialEq, Eq)]
-enum PrefetchResult {
-    Continue,
-    Complete,
-    EndOfFile,
-}
-
-enum DownloadFinishResult {
-    Complete,
-    ChunkMissing,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct SourceHandle {
-    downloaded: Arc<RwLock<RangeSet<u64>>>,
+    downloaded: Downloaded,
     requested_position: RequestedPosition,
     position_reached: PositionReached,
     content_length: Option<u64>,
@@ -70,8 +58,8 @@ pub(crate) struct SourceHandle {
 }
 
 impl SourceHandle {
-    pub fn downloaded(&self) -> RwLockReadGuard<rangemap::RangeSet<u64>> {
-        self.downloaded.read()
+    pub fn get_downloaded_around(&self, pos: u64) -> Option<Range<u64>> {
+        self.downloaded.get(pos)
     }
 
     pub fn request_position(&self, position: u64) {
@@ -160,9 +148,27 @@ impl PositionReached {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct Downloaded(Arc<RwLock<RangeSet<u64>>>);
+
+impl Downloaded {
+    fn from_writer<H: StorageWriter>(writer: &H) -> Self {
+        Self(Arc::new(RwLock::new(writer.downloaded())))
+    }
+    fn add(&self, range: Range<u64>) {
+        self.0.write().insert(range)
+    }
+    fn get(&self, pos: u64) -> Option<Range<u64>> {
+        self.0.read().get(&pos).cloned()
+    }
+    fn next_gap(&self, range: &Range<u64>) -> Option<Range<u64>> {
+        self.0.read().gaps(&range).next()
+    }
+}
+
 pub(crate) struct Source<W: StorageWriter> {
     writer: W,
-    downloaded: Arc<RwLock<RangeSet<u64>>>,
+    downloaded: Downloaded,
     requested_position: RequestedPosition,
     position_reached: PositionReached,
     content_length: Option<u64>,
@@ -178,10 +184,8 @@ struct Download {
 }
 
 enum DownloadStatus {
-    Prefetch(PrefetchResult),
-    FinishOrSeek(DownloadFinishResult),
-    HandledChunk,
-    FetchError,
+    Continue,
+    Complete,
 }
 
 impl Download {
@@ -197,13 +201,13 @@ impl Download {
 impl<H: StorageWriter> Source<H> {
     pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(32);
-        let downloaded = Arc::new(RwLock::new(writer.downloaded()));
+        let downloaded = Downloaded::from_writer(&writer);
 
         Self {
             writer,
             downloaded,
             requested_position: RequestedPosition::default(),
-            position_reached: Default::default(),
+            position_reached: PositionReached::default(),
             seek_tx,
             seek_rx,
             content_length,
@@ -242,18 +246,10 @@ impl<H: StorageWriter> Source<H> {
                 }
             };
 
-            use DownloadFinishResult as DR;
             use DownloadStatus as DS;
-            use PrefetchResult as PR;
-
             match download.status.as_ref().unwrap() {
-                DS::Prefetch(PR::Continue) => continue,
-                DS::Prefetch(PR::Complete) => continue,
-                DS::Prefetch(PR::EndOfFile) => break,
-                DS::FinishOrSeek(DR::Complete) => break,
-                DS::FinishOrSeek(DR::ChunkMissing) => continue,
-                DS::HandledChunk => continue,
-                DS::FetchError => continue,
+                DS::Continue => continue,
+                DS::Complete => break,
             }
         }
         Ok(())
@@ -270,14 +266,14 @@ impl<H: StorageWriter> Source<H> {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("Error fetching chunk from stream: {e:?}");
-                return Ok(DownloadStatus::FetchError);
+                return Ok(DownloadStatus::Continue);
             }
         };
 
         if let Some(bytes) = bytes {
             if bytes.is_empty() {
                 // needed as empty section lead to panic in rangemap
-                return Ok(DownloadStatus::HandledChunk);
+                return Ok(DownloadStatus::Continue);
             }
 
             let position = if *prefetch_complete {
@@ -285,12 +281,15 @@ impl<H: StorageWriter> Source<H> {
             } else {
                 0
             };
+
             self.writer.write_all(&bytes)?;
             self.writer.flush()?;
+
             let new_position = self.writer.stream_position()?;
             *prefetch_complete |= new_position >= self.settings.prefetch_bytes;
+
             if *prefetch_complete {
-                self.downloaded.write().insert(position..new_position);
+                self.downloaded.add(position..new_position);
                 if let Some(requested) = self.requested_position.get() {
                     if new_position >= requested {
                         self.requested_position.clear();
@@ -298,16 +297,13 @@ impl<H: StorageWriter> Source<H> {
                     }
                 }
             }
-            Ok(DownloadStatus::HandledChunk)
+            Ok(DownloadStatus::Continue)
         } else {
             // end of stream
             if !*prefetch_complete {
-                self.downloaded
-                    .write()
-                    .insert(0..self.writer.stream_position()?);
+                self.downloaded.add(0..self.writer.stream_position()?);
             }
-            let res = self.finish_or_seek(stream, self.content_length).await?;
-            Ok(DownloadStatus::FinishOrSeek(res))
+            self.finish_or_seek(stream, self.content_length).await
         }
     }
 
@@ -315,7 +311,7 @@ impl<H: StorageWriter> Source<H> {
         &mut self,
         stream: &mut S,
         content_length: Option<u64>,
-    ) -> io::Result<DownloadFinishResult> {
+    ) -> io::Result<DownloadStatus> {
         if let Some(content_length) = content_length {
             let gap = self.get_download_gap(content_length);
             if let Some(gap) = gap {
@@ -324,17 +320,16 @@ impl<H: StorageWriter> Source<H> {
                     "downloading missing stream chunk"
                 );
                 self.seek(stream, gap.start, Some(gap.end)).await?;
-                return Ok(DownloadFinishResult::ChunkMissing);
+                return Ok(DownloadStatus::Continue);
             }
         }
         self.writer.flush()?;
         self.signal_download_complete();
-        Ok(DownloadFinishResult::Complete)
+        Ok(DownloadStatus::Complete)
     }
 
-    fn should_seek(&mut self, pos: u64) -> io::Result<bool> {
-        let downloaded = self.downloaded.read();
-        Ok(if let Some(range) = downloaded.get(&pos) {
+    fn should_seek(&mut self, wanted_pos: u64) -> io::Result<bool> {
+        Ok(if let Some(range) = self.downloaded.get(wanted_pos) {
             !range.contains(&self.writer.stream_position()?)
         } else {
             true
@@ -353,10 +348,8 @@ impl<H: StorageWriter> Source<H> {
     }
 
     fn get_download_gap(&self, content_length: u64) -> Option<Range<u64>> {
-        let downloaded = self.downloaded.read();
         let range = 0..content_length;
-        let mut gaps = downloaded.gaps(&range);
-        gaps.next()
+        self.downloaded.next_gap(&range)
     }
 
     fn signal_download_complete(&self) {
