@@ -162,7 +162,7 @@ impl Downloaded {
         self.0.read().get(&pos).cloned()
     }
     fn next_gap(&self, range: &Range<u64>) -> Option<Range<u64>> {
-        self.0.read().gaps(&range).next()
+        self.0.read().gaps(range).next()
     }
 }
 
@@ -179,7 +179,6 @@ pub(crate) struct Source<W: StorageWriter> {
 
 struct Download {
     prefetch_complete: bool,
-    download_all: bool,
     status: Option<DownloadStatus>,
 }
 
@@ -192,7 +191,6 @@ impl Download {
     fn new(settings: &Settings) -> Self {
         Self {
             prefetch_complete: settings.prefetch_bytes == 0,
-            download_all: false,
             status: None,
         }
     }
@@ -247,9 +245,9 @@ impl<H: StorageWriter> Source<H> {
             };
 
             use DownloadStatus as DS;
-            match download.status.as_ref().unwrap() {
-                DS::Continue => continue,
-                DS::Complete => break,
+            match download.status.as_ref() {
+                None | Some(DS::Continue) => continue,
+                Some(DS::Complete) => break,
             }
         }
         Ok(())
