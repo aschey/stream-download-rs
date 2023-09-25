@@ -9,7 +9,7 @@ pub mod bounded;
 pub mod memory;
 #[cfg(feature = "temp-storage")]
 pub mod temp;
-// #[cfg(feature = "unstable-permanent-storage")]
+#[cfg(feature = "unstable-permanent-storage")]
 pub mod permanent;
 
 /// Creates a [`StorageReader`] and [`StorageWriter`] based on the content

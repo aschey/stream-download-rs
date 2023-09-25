@@ -72,7 +72,7 @@ impl Progress {
         self.inner.lock().unwrap().downloaded()
     }
 
-    pub(crate) fn finish_section(&self, end: u64) -> io::Result<()> {
+    pub(crate) fn finish_section(&self, _end: u64) -> io::Result<()> {
         todo!()
     }
 }
