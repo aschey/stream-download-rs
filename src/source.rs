@@ -103,11 +103,7 @@ impl RequestedPosition {
 
     fn get(&self) -> Option<u64> {
         let val = self.0.load(Ordering::Relaxed);
-        if val == -1 {
-            None
-        } else {
-            Some(val as u64)
-        }
+        if val == -1 { None } else { Some(val as u64) }
     }
 
     fn set(&self, position: u64) {

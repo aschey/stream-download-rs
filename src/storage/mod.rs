@@ -7,10 +7,10 @@ use rangemap::RangeSet;
 pub mod adaptive;
 pub mod bounded;
 pub mod memory;
-#[cfg(feature = "temp-storage")]
-pub mod temp;
 #[cfg(feature = "unstable-permanent-storage")]
 pub mod permanent;
+#[cfg(feature = "temp-storage")]
+pub mod temp;
 
 /// Creates a [`StorageReader`] and [`StorageWriter`] based on the content
 /// length returned from the [`SourceStream`](crate::source::SourceStream).

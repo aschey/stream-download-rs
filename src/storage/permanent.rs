@@ -32,12 +32,14 @@ pub enum Error {
 }
 
 impl PermanentStorageProvider {
-    /// Creates a new [`PermanentStorageProvider`] to download to a user specified path. It removes any existing file throwing away any
-    /// download progress made.
+    /// Creates a new [`PermanentStorageProvider`] to download to a user specified path. It removes
+    /// any existing file throwing away any download progress made.
     pub fn restart(path: PathBuf) -> Result<Self, Error> {
         Self::new(path, true)
     }
-    /// Creates a new [`PermanentStorageProvider`] to download to a user specified path. It tries to continue if any file existed. If it can not it starts downloading from scratch overwriting existing data.
+    /// Creates a new [`PermanentStorageProvider`] to download to a user specified path. It tries to
+    /// continue if any file existed. If it can not it starts downloading from scratch overwriting
+    /// existing data.
     pub fn start(path: PathBuf) -> Result<Self, Error> {
         Self::new(path, false)
     }
