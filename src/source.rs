@@ -95,7 +95,7 @@ impl Default for RequestedPosition {
 }
 
 // relaxed ordering as we are not using the atomic to
-// lock something or to syncronize threads.
+// lock something or to synchronize threads.
 impl RequestedPosition {
     fn clear(&self) {
         self.0.store(-1, Ordering::Relaxed);
