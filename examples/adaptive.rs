@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     let Some(url) = args().nth(1) else {
-        return Err("Usage: cargo run --example=adaptive -- <url>")?;
+        Err("Usage: cargo run --example=adaptive -- <url>")?
     };
 
     let (_stream, handle) = rodio::OutputStream::try_default()?;

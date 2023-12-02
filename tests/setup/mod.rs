@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::OnceLock;
 
+use axum::Router;
 use ctor::ctor;
 use tokio::runtime::Runtime;
 use tower_http::services::ServeDir;
@@ -15,15 +16,16 @@ fn setup() {
 
     let rt = SERVER_RT.get_or_init(|| Runtime::new().unwrap());
     let _guard = rt.enter();
-    let service = ServeDir::new("./assets");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
 
-    let server = hyper::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
-        .unwrap()
-        .serve(tower::make::Shared::new(service));
-    SERVER_ADDR.get_or_init(|| server.local_addr());
+    SERVER_ADDR.get_or_init(|| listener.local_addr().unwrap());
+    let service = ServeDir::new("./assets");
+    let router = Router::new().nest_service("/", service);
 
     rt.spawn(async move {
-        server.await.unwrap();
+        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        axum::serve(listener, router).await.unwrap();
     });
 }
 
