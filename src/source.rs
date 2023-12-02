@@ -252,9 +252,13 @@ impl<H: StorageWriter> Source<H> {
         } else {
             debug!("file shorter than prefetch length, download finished");
             self.writer.flush()?;
-            self.downloaded
-                .write()
-                .insert(0..self.writer.stream_position()?);
+            let pos = self.writer.stream_position()?;
+
+            // prevent panicking on an empty stream
+            if pos > 0 {
+                self.downloaded.write().insert(0..pos);
+            }
+
             self.complete_download();
             Ok(PrefetchResult::EndOfFile)
         }
