@@ -25,12 +25,12 @@ impl StorageProvider for MemoryStorageProvider {
         let written = Arc::new(AtomicUsize::new(0));
         let reader = MemoryStorage {
             inner: inner.clone(),
-            pos: 0,
+            position: 0,
             written: written.clone(),
         };
         let writer = MemoryStorage {
             inner,
-            pos: 0,
+            position: 0,
             written,
         };
         Ok((reader, writer))
@@ -41,7 +41,7 @@ impl StorageProvider for MemoryStorageProvider {
 #[derive(Debug)]
 pub struct MemoryStorage {
     inner: Arc<RwLock<Vec<u8>>>,
-    pos: usize,
+    position: usize,
     written: Arc<AtomicUsize>,
 }
 
@@ -49,25 +49,25 @@ impl Read for MemoryStorage {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let inner = self.inner.read();
 
-        let available_len = (inner.len() - self.pos).min(self.written.load(Ordering::SeqCst));
+        let available_len = (inner.len() - self.position).min(self.written.load(Ordering::SeqCst));
         let read_len = available_len.min(buf.len());
-        buf[..read_len].copy_from_slice(&inner[self.pos..self.pos + read_len]);
-        self.pos += read_len;
+        buf[..read_len].copy_from_slice(&inner[self.position..self.position + read_len]);
+        self.position += read_len;
         Ok(read_len)
     }
 }
 
 impl Seek for MemoryStorage {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let len = self.inner.read().len();
-        let new_pos = match pos {
-            SeekFrom::Start(pos) => pos as usize,
-            SeekFrom::Current(from_current) => ((self.pos as i64) + from_current) as usize,
+        let new_position = match position {
+            SeekFrom::Start(position) => position as usize,
+            SeekFrom::Current(from_current) => ((self.position as i64) + from_current) as usize,
             SeekFrom::End(from_end) => (len as i64 + from_end) as usize,
         };
 
-        self.pos = new_pos;
-        Ok(new_pos as u64)
+        self.position = new_position;
+        Ok(new_position as u64)
     }
 }
 
@@ -75,13 +75,13 @@ impl Write for MemoryStorage {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut inner = self.inner.write();
 
-        if self.pos + buf.len() > inner.len() {
-            inner.resize(self.pos + buf.len(), 0);
+        if self.position + buf.len() > inner.len() {
+            inner.resize(self.position + buf.len(), 0);
         }
 
-        inner[self.pos..self.pos + buf.len()].copy_from_slice(buf);
+        inner[self.position..self.position + buf.len()].copy_from_slice(buf);
 
-        self.pos += buf.len();
+        self.position += buf.len();
         self.written.fetch_add(buf.len(), Ordering::SeqCst);
         Ok(buf.len())
     }

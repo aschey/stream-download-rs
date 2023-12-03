@@ -58,8 +58,8 @@ where
         let shared_info = Arc::new(Mutex::new(SharedInfo {
             read: 0,
             written: 0,
-            read_pos: 0,
-            write_pos: 0,
+            read_position: 0,
+            write_position: 0,
             size: self.size,
         }));
         let reader = BoundedStorageReader {
@@ -78,18 +78,18 @@ where
 struct SharedInfo {
     read: usize,
     written: usize,
-    read_pos: usize,
-    write_pos: usize,
+    read_position: usize,
+    write_position: usize,
     size: usize,
 }
 
 impl SharedInfo {
-    fn mapped_read_pos(&self, val: usize) -> usize {
-        (val + (self.read_pos % self.size)) % self.size
+    fn mapped_read_position(&self, val: usize) -> usize {
+        (val + (self.read_position % self.size)) % self.size
     }
 
-    fn mapped_write_pos(&self, val: usize) -> usize {
-        (val + (self.write_pos % self.size)) % self.size
+    fn mapped_write_position(&self, val: usize) -> usize {
+        (val + (self.write_position % self.size)) % self.size
     }
 }
 
@@ -137,21 +137,25 @@ where
             return Ok(0);
         }
 
-        if shared_info.write_pos.saturating_sub(shared_info.read_pos) > shared_info.size {
+        if shared_info
+            .write_position
+            .saturating_sub(shared_info.read_position)
+            > shared_info.size
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
                     "read position {} is too far behind write position {}, size {}",
-                    shared_info.read_pos, shared_info.write_pos, shared_info.size
+                    shared_info.read_position, shared_info.write_position, shared_info.size
                 ),
             ));
         }
 
-        let available_len = shared_info.write_pos - shared_info.read_pos;
-        let size = shared_info.size.min(shared_info.write_pos);
+        let available_len = shared_info.write_position - shared_info.read_position;
+        let size = shared_info.size.min(shared_info.write_position);
 
-        let start = shared_info.mapped_read_pos(0);
-        let end = shared_info.mapped_read_pos(buf.len().min(available_len) - 1) + 1;
+        let start = shared_info.mapped_read_position(0);
+        let end = shared_info.mapped_read_position(buf.len().min(available_len) - 1) + 1;
         trace!(start, end, size, buf_len = buf.len(), "bounded read");
 
         let read_len = if start <= end {
@@ -182,7 +186,7 @@ where
             first_seg_len + end
         };
 
-        shared_info.read_pos += read_len;
+        shared_info.read_position += read_len;
         shared_info.read += read_len;
 
         Ok(read_len)
@@ -194,12 +198,12 @@ where
     T: StorageReader,
 {
     #[instrument]
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let mut shared_info = self.shared_info.lock();
-        let new_pos = match pos {
-            SeekFrom::Start(pos) => pos as usize,
+        let new_position = match position {
+            SeekFrom::Start(position) => position as usize,
             SeekFrom::Current(from_current) => {
-                ((shared_info.read_pos as i64) + from_current) as usize
+                ((shared_info.read_position as i64) + from_current) as usize
             }
             SeekFrom::End(_) => {
                 return Err(io::Error::new(
@@ -209,8 +213,8 @@ where
             }
         };
 
-        shared_info.read_pos = new_pos;
-        Ok(new_pos as u64)
+        shared_info.read_position = new_position;
+        Ok(new_position as u64)
     }
 }
 
@@ -242,8 +246,8 @@ where
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut shared_info = self.shared_info.lock();
 
-        let start = shared_info.mapped_write_pos(0);
-        let end = shared_info.mapped_write_pos(buf.len() - 1) + 1;
+        let start = shared_info.mapped_write_position(0);
+        let end = shared_info.mapped_write_position(buf.len() - 1) + 1;
         trace!(start, end, buf_len = buf.len(), "bounded write");
 
         self.inner
@@ -266,7 +270,7 @@ where
                 .wrap_err("error writing second mapped segment")?;
         }
 
-        shared_info.write_pos += buf.len();
+        shared_info.write_position += buf.len();
         shared_info.written += buf.len();
 
         self.inner.flush().wrap_err("error flushing during write")?;
@@ -283,12 +287,12 @@ where
     T: StorageWriter,
 {
     #[instrument]
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let mut shared_info = self.shared_info.lock();
-        let new_pos = match pos {
-            SeekFrom::Start(pos) => pos as usize,
+        let new_position = match position {
+            SeekFrom::Start(position) => position as usize,
             SeekFrom::Current(from_current) => {
-                ((shared_info.write_pos as i64) + from_current) as usize
+                ((shared_info.write_position as i64) + from_current) as usize
             }
             SeekFrom::End(_) => {
                 return Err(io::Error::new(
@@ -298,7 +302,7 @@ where
             }
         };
 
-        shared_info.write_pos = new_pos;
-        Ok(new_pos as u64)
+        shared_info.write_position = new_position;
+        Ok(new_position as u64)
     }
 }

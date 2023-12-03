@@ -83,10 +83,10 @@ impl<T> Seek for AdaptiveStorageReader<T>
 where
     T: StorageReader,
 {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         match self {
-            Self::Bounded(inner) => inner.seek(pos),
-            Self::Unbounded(inner) => inner.seek(pos),
+            Self::Bounded(inner) => inner.seek(position),
+            Self::Unbounded(inner) => inner.seek(position),
         }
     }
 }
@@ -123,10 +123,10 @@ impl<T> Seek for AdaptiveStorageWriter<T>
 where
     T: StorageWriter,
 {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         match self {
-            Self::Bounded(inner) => inner.seek(pos),
-            Self::Unbounded(inner) => inner.seek(pos),
+            Self::Bounded(inner) => inner.seek(position),
+            Self::Unbounded(inner) => inner.seek(position),
         }
     }
 }

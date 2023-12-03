@@ -10,7 +10,7 @@ use std::time::Instant;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use parking_lot::{Condvar, Mutex, RwLock, RwLockReadGuard};
+use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -48,54 +48,26 @@ pub trait SourceStream:
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()>;
 }
 
-#[derive(PartialEq, Eq)]
-enum PrefetchResult {
-    Continue,
-    Complete,
-    EndOfFile,
-}
-
-enum DownloadFinishResult {
-    Complete,
-    ChunkMissing,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct SourceHandle {
-    downloaded: Arc<RwLock<RangeSet<u64>>>,
-    requested_position: Arc<AtomicI64>,
-    position_reached: Arc<(Mutex<Waiter>, Condvar)>,
+    downloaded: Downloaded,
+    requested_position: RequestedPosition,
+    position_reached: PositionReached,
     content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
 }
 
 impl SourceHandle {
-    pub fn downloaded(&self) -> RwLockReadGuard<rangemap::RangeSet<u64>> {
-        self.downloaded.read()
+    pub fn get_downloaded_at_position(&self, position: u64) -> Option<Range<u64>> {
+        self.downloaded.get(position)
     }
 
     pub fn request_position(&self, position: u64) {
-        self.requested_position
-            .store(position as i64, Ordering::SeqCst);
+        self.requested_position.set(position);
     }
 
     pub fn wait_for_requested_position(&self) {
-        let (mutex, cvar) = &*self.position_reached;
-        let mut waiter = mutex.lock();
-        if !waiter.stream_done {
-            let wait_start = Instant::now();
-            debug!("waiting for requested position");
-            cvar.wait_while(&mut waiter, |waiter| {
-                !waiter.stream_done && !waiter.position_reached
-            });
-            if !waiter.stream_done {
-                waiter.position_reached = false;
-            }
-            debug!(
-                elapsed = format!("{:?}", wait_start.elapsed()),
-                "position reached"
-            );
-        }
+        self.position_reached.wait_for_position_reached()
     }
 
     pub fn seek(&self, position: u64) {
@@ -107,21 +79,114 @@ impl SourceHandle {
     }
 }
 
+#[derive(Debug, Clone)]
+struct RequestedPosition(Arc<AtomicI64>);
+
+impl Default for RequestedPosition {
+    fn default() -> Self {
+        Self(Arc::new(AtomicI64::new(-1)))
+    }
+}
+
+// relaxed ordering as we are not using the atomic to
+// lock something or to synchronize threads.
+impl RequestedPosition {
+    fn clear(&self) {
+        self.0.store(-1, Ordering::Relaxed);
+    }
+
+    fn get(&self) -> Option<u64> {
+        let val = self.0.load(Ordering::Relaxed);
+        if val == -1 { None } else { Some(val as u64) }
+    }
+
+    fn set(&self, position: u64) {
+        self.0.store(position as i64, Ordering::Relaxed);
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+struct PositionReached(Arc<(Mutex<Waiter>, Condvar)>);
+
+impl PositionReached {
+    fn notify_position_reached(&self) {
+        let (mutex, cvar) = self.0.as_ref();
+        mutex.lock().position_reached = true;
+        cvar.notify_all();
+    }
+
+    fn notify_stream_done(&self) {
+        let (mutex, cvar) = self.0.as_ref();
+        mutex.lock().stream_done = true;
+        cvar.notify_all();
+    }
+
+    fn wait_for_position_reached(&self) {
+        let (mutex, cvar) = self.0.as_ref();
+        let mut waiter = mutex.lock();
+        if waiter.stream_done {
+            return;
+        }
+
+        #[cfg(debug_assertions)]
+        let wait_start = Instant::now();
+
+        cvar.wait_while(&mut waiter, |waiter| {
+            !waiter.stream_done && !waiter.position_reached
+        });
+
+        #[cfg(debug_assertions)]
+        debug!(
+            elapsed = format!("{:?}", wait_start.elapsed()),
+            "position reached"
+        );
+        if !waiter.stream_done {
+            waiter.position_reached = false;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct Downloaded(Arc<RwLock<RangeSet<u64>>>);
+
+impl Downloaded {
+    fn add(&self, range: Range<u64>) {
+        if range.end > range.start {
+            self.0.write().insert(range)
+        }
+    }
+
+    fn get(&self, position: u64) -> Option<Range<u64>> {
+        self.0.read().get(&position).cloned()
+    }
+
+    fn next_gap(&self, range: &Range<u64>) -> Option<Range<u64>> {
+        self.0.read().gaps(range).next()
+    }
+}
+
 #[derive(Default, Debug)]
 struct Waiter {
     position_reached: bool,
     stream_done: bool,
 }
 
+#[derive(PartialEq, Eq)]
+enum DownloadStatus {
+    Continue,
+    Complete,
+}
+
 pub(crate) struct Source<W: StorageWriter> {
     writer: W,
-    downloaded: Arc<RwLock<RangeSet<u64>>>,
-    requested_position: Arc<AtomicI64>,
-    position_reached: Arc<(Mutex<Waiter>, Condvar)>,
+    downloaded: Downloaded,
+    requested_position: RequestedPosition,
+    position_reached: PositionReached,
     content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     settings: Settings,
+    prefetch_complete: bool,
 }
 
 impl<H: StorageWriter> Source<H> {
@@ -130,11 +195,12 @@ impl<H: StorageWriter> Source<H> {
         Self {
             writer,
             downloaded: Default::default(),
-            requested_position: Arc::new(AtomicI64::new(-1)),
+            requested_position: RequestedPosition::default(),
             position_reached: Default::default(),
             seek_tx,
             seek_rx,
             content_length,
+            prefetch_complete: settings.prefetch_bytes == 0,
             settings,
         }
     }
@@ -147,129 +213,89 @@ impl<H: StorageWriter> Source<H> {
     ) -> io::Result<()> {
         debug!("starting file download");
 
+        #[cfg(debug_assertions)]
         let download_start = Instant::now();
 
-        // Don't start prefetch if it's set to 0
-        let mut prefetch_complete = self.settings.prefetch_bytes == 0;
         loop {
             tokio::select! {
+                position = self.seek_rx.recv() => {
+                    let position = position.expect("seek_tx dropped");
+                    if self.should_seek(position)? {
+                        debug!("seek position not yet downloaded");
+
+                        #[cfg(debug_assertions)]
+                        if !self.prefetch_complete {
+                            debug!("seeking during prefetch, ending prefetch early");
+                            self.downloaded.add(0.. self.writer.stream_position()?);
+                            self.prefetch_complete = true;
+                        }
+                        self.seek(&mut stream, position, None).await?;
+                    }
+                    continue
+                },
                 bytes = stream.next() => {
-                    let bytes = match bytes {
-                        Some(Err(e)) => {
-                            error!("Error fetching chunk from stream: {e:?}");
-                            continue;
-                        },
-                        Some(Ok(bytes)) => {
-                            trace!(chunk_size=bytes.len());
-                            Some(bytes)
-                        },
-                        None => None,
-                    };
-
-                    if prefetch_complete {
-                        if let Some(bytes) = bytes {
-                            self.handle_response_chunk(bytes)?;
-                        } else {
-                            debug!(
-                                download_duration = format!("{:?}", download_start.elapsed()),
-                                "stream finished downloading"
-                            );
-                            match self.download_finish(&mut stream, self.content_length).await? {
-                                DownloadFinishResult::ChunkMissing => {
-                                    continue;
-                                },
-                                DownloadFinishResult::Complete => {
-                                    return Ok(());
-                                },
-                            }
-                        }
-                    } else {
-                        match self.prefetch(bytes).await? {
-                            PrefetchResult::Continue => { },
-                            PrefetchResult::Complete => {
-                                debug!(
-                                    duration = format!("{:?}",
-                                    download_start.elapsed()),
-                                    "prefetch complete"
-                                );
-                                prefetch_complete = true;
-                            },
-                            PrefetchResult::EndOfFile => {
-                                debug!(
-                                    download_duration = format!("{:?}", download_start.elapsed()),
-                                    "stream finished downloading"
-                                );
-                                return Ok(());
-                            },
-                        }
+                    if self.handle_bytes(&mut stream, bytes).await? == DownloadStatus::Complete {
+                        debug!(
+                            download_duration = format!("{:?}", download_start.elapsed()),
+                            "stream finished downloading"
+                        );
+                        break;
                     }
-                },
-                pos = self.seek_rx.recv() => {
-                    if let Some(pos) = pos {
-                        debug!(position = pos, "received seek position");
-                        if self.should_seek(pos)? {
-                            debug!("seek position not yet downloaded");
-                            if !prefetch_complete {
-                                debug!("seeking during prefetch, ending prefetch early");
-                                prefetch_complete = true;
-                            }
-
-                            self.seek(&mut stream, pos, None).await?;
-                        }
-                    }
-                },
+                }
                 _ = cancellation_token.cancelled() => {
                     debug!("received cancellation request, stopping download task");
                     self.writer.flush()?;
-                    self.complete_download();
-                    return Ok(());
+                    self.signal_download_complete();
+                    return Ok(())
                 }
-            }
+            };
         }
+        Ok(())
     }
 
-    async fn prefetch(&mut self, bytes: Option<Bytes>) -> io::Result<PrefetchResult> {
-        if let Some(bytes) = bytes {
-            self.writer.write_all(&bytes)?;
-            self.writer.flush()?;
-            let stream_position = self.writer.stream_position()?;
-            trace!(
-                stream_position = stream_position,
-                prefetch_target = self.settings.prefetch_bytes,
-                progress = format!(
-                    "{:.2}%",
-                    (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
-                ),
-                "prefetch"
-            );
-
-            if stream_position >= self.settings.prefetch_bytes {
-                self.downloaded.write().insert(0..stream_position);
-                Ok(PrefetchResult::Complete)
-            } else {
-                Ok(PrefetchResult::Continue)
-            }
-        } else {
-            debug!("file shorter than prefetch length, download finished");
-            self.writer.flush()?;
-            let pos = self.writer.stream_position()?;
-
-            // prevent panicking on an empty stream
-            if pos > 0 {
-                self.downloaded.write().insert(0..pos);
-            }
-
-            self.complete_download();
-            Ok(PrefetchResult::EndOfFile)
-        }
-    }
-
-    async fn download_finish<S: SourceStream>(
+    async fn handle_prefetch<S: SourceStream>(
         &mut self,
         stream: &mut S,
-        content_length: Option<u64>,
-    ) -> io::Result<DownloadFinishResult> {
-        if let Some(content_length) = content_length {
+        bytes: Option<Bytes>,
+    ) -> io::Result<DownloadStatus> {
+        let Some(bytes) = bytes else {
+            self.prefetch_complete = true;
+            debug!("file shorter than prefetch length, download finished");
+            self.writer.flush()?;
+            let position = self.writer.stream_position()?;
+            self.downloaded.add(0..position);
+
+            return self.finish_or_find_next_gap(stream).await;
+        };
+
+        self.writer.write_all(&bytes)?;
+        self.writer.flush()?;
+        let stream_position = self.writer.stream_position()?;
+
+        #[cfg(debug_assertions)]
+        trace!(
+            stream_position = stream_position,
+            prefetch_target = self.settings.prefetch_bytes,
+            progress = format!(
+                "{:.2}%",
+                (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
+            ),
+            "prefetch"
+        );
+
+        if stream_position >= self.settings.prefetch_bytes {
+            self.downloaded.add(0..stream_position);
+            self.prefetch_complete = true;
+        }
+
+        Ok(DownloadStatus::Continue)
+    }
+
+    async fn finish_or_find_next_gap<S: SourceStream>(
+        &mut self,
+        stream: &mut S,
+    ) -> io::Result<DownloadStatus> {
+        if let Some(content_length) = self.content_length {
             let gap = self.get_download_gap(content_length);
             if let Some(gap) = gap {
                 debug!(
@@ -277,51 +303,65 @@ impl<H: StorageWriter> Source<H> {
                     "downloading missing stream chunk"
                 );
                 self.seek(stream, gap.start, Some(gap.end)).await?;
-                return Ok(DownloadFinishResult::ChunkMissing);
+                return Ok(DownloadStatus::Continue);
             }
         }
         self.writer.flush()?;
-        self.complete_download();
-        Ok(DownloadFinishResult::Complete)
+        self.signal_download_complete();
+        Ok(DownloadStatus::Complete)
     }
 
-    fn handle_response_chunk(&mut self, bytes: Bytes) -> io::Result<()> {
+    async fn handle_bytes<S: SourceStream>(
+        &mut self,
+        stream: &mut S,
+        bytes: Option<Result<Bytes, S::StreamError>>,
+    ) -> io::Result<DownloadStatus> {
+        let bytes = match bytes.transpose() {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Error fetching chunk from stream: {e:?}");
+                return Ok(DownloadStatus::Continue);
+            }
+        };
+
+        if !self.prefetch_complete {
+            return self.handle_prefetch(stream, bytes).await;
+        }
+
+        let Some(bytes) = bytes else {
+            return self.finish_or_find_next_gap(stream).await;
+        };
+
         let position = self.writer.stream_position()?;
         self.writer.write_all(&bytes)?;
         self.writer.flush()?;
         let new_position = self.writer.stream_position()?;
+
         trace!(
             previous_position = position,
             new_position,
-            "received response chunk"
+            chunk_size = bytes.len(),
+            "received response chunk",
         );
 
-        // RangeSet will panic if we try to insert a slice with 0 length. This could
-        // happen if the current chunk is empty.
-        if new_position > position {
-            self.downloaded.write().insert(position..new_position);
-        }
-        let requested = self.requested_position.load(Ordering::SeqCst);
-        if requested > -1 {
+        self.downloaded.add(position..new_position);
+        if let Some(requested) = self.requested_position.get() {
             debug!(
                 requested_position = requested,
                 current_position = new_position,
                 "received requested position"
             );
-            if new_position as i64 >= requested {
-                debug!("requested position reached, notifying");
-                self.requested_position.store(-1, Ordering::SeqCst);
-                let (mutex, cvar) = &*self.position_reached;
-                (mutex.lock()).position_reached = true;
-                cvar.notify_all();
+
+            if new_position >= requested {
+                self.requested_position.clear();
+                self.position_reached.notify_position_reached()
             }
         }
-        Ok(())
+        Ok(DownloadStatus::Continue)
     }
 
-    fn should_seek(&mut self, pos: u64) -> io::Result<bool> {
-        let downloaded = self.downloaded.read();
-        Ok(if let Some(range) = downloaded.get(&pos) {
+    fn should_seek(&mut self, position: u64) -> io::Result<bool> {
+        Ok(if let Some(range) = self.downloaded.get(position) {
             !range.contains(&self.writer.stream_position()?)
         } else {
             true
@@ -340,16 +380,12 @@ impl<H: StorageWriter> Source<H> {
     }
 
     fn get_download_gap(&self, content_length: u64) -> Option<Range<u64>> {
-        let downloaded = self.downloaded.read();
         let range = 0..content_length;
-        let mut gaps = downloaded.gaps(&range);
-        gaps.next()
+        self.downloaded.next_gap(&range)
     }
 
-    fn complete_download(&self) {
-        let (mutex, cvar) = &*self.position_reached;
-        (mutex.lock()).stream_done = true;
-        cvar.notify_all();
+    fn signal_download_complete(&self) {
+        self.position_reached.notify_stream_done()
     }
 
     pub(crate) fn source_handle(&self) -> SourceHandle {
