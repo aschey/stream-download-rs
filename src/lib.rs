@@ -222,6 +222,30 @@ impl<P: StorageProvider> StreamDownload<P> {
             download_task_cancellation_token: cancellation_token,
         })
     }
+
+    fn get_absolute_seek_position(&mut self, relative_position: SeekFrom) -> io::Result<u64> {
+        Ok(match relative_position {
+            SeekFrom::Start(position) => {
+                debug!(seek_position = position, "seeking from start");
+                position
+            }
+            SeekFrom::End(position) => {
+                debug!(seek_position = position, "seeking from end");
+                if let Some(length) = self.handle.content_length() {
+                    (length as i64 - position) as u64
+                } else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "cannot seek from end when content length is unknown",
+                    ));
+                }
+            }
+            SeekFrom::Current(position) => {
+                debug!(seek_position = position, "seeking from current position");
+                (self.output_reader.stream_position()? as i64 + position) as u64
+            }
+        })
+    }
 }
 
 impl<P: StorageProvider> Drop for StreamDownload<P> {
@@ -241,7 +265,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
             requested_position = requested_position
         );
 
-        if let Some(closest_set) = self.handle.downloaded().get(&stream_position) {
+        if let Some(closest_set) = self.handle.get_downloaded_at_position(stream_position) {
             trace!(
                 downloaded_range = format!("{closest_set:?}"),
                 "current position already downloaded"
@@ -281,52 +305,35 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
 
 impl<P: StorageProvider> Seek for StreamDownload<P> {
     #[instrument(skip(self))]
-    fn seek(&mut self, relative_pos: SeekFrom) -> io::Result<u64> {
-        let absolute_seek_pos = match relative_pos {
-            SeekFrom::Start(pos) => {
-                debug!(seek_position = pos, "seeking from start");
-                pos
-            }
-            SeekFrom::End(pos) => {
-                debug!(seek_position = pos, "seeking from end");
-                if let Some(length) = self.handle.content_length() {
-                    (length as i64 - pos) as u64
-                } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Unsupported,
-                        "cannot seek from end when content length is unknown",
-                    ));
-                }
-            }
-            SeekFrom::Current(pos) => {
-                debug!(seek_position = pos, "seeking from current position");
-                (self.output_reader.stream_position()? as i64 + pos) as u64
-            }
-        };
+    fn seek(&mut self, relative_position: SeekFrom) -> io::Result<u64> {
+        let absolute_seek_position = self.get_absolute_seek_position(relative_position)?;
 
-        debug!(absolute_seek_pos, "absolute seek position");
-        if let Some(closest_set) = self.handle.downloaded().get(&absolute_seek_pos) {
+        debug!(absolute_seek_position, "absolute seek position");
+        if let Some(closest_set) = self
+            .handle
+            .get_downloaded_at_position(absolute_seek_position)
+        {
             debug!(
                 downloaded_range = format!("{closest_set:?}"),
                 "seek position already downloaded"
             );
             return self
                 .output_reader
-                .seek(SeekFrom::Start(absolute_seek_pos))
+                .seek(SeekFrom::Start(absolute_seek_position))
                 .tap(|p| debug!(position = format!("{p:?}"), "returning seek position"));
         }
 
-        self.handle.request_position(absolute_seek_pos);
-        self.handle.seek(absolute_seek_pos);
+        self.handle.request_position(absolute_seek_position);
+        self.handle.seek(absolute_seek_position);
         debug!(
-            requested_position = absolute_seek_pos,
+            requested_position = absolute_seek_position,
             "waiting for requested position"
         );
         self.handle.wait_for_requested_position();
         debug!("reached seek position");
 
         self.output_reader
-            .seek(SeekFrom::Start(absolute_seek_pos))
+            .seek(SeekFrom::Start(absolute_seek_position))
             .tap(|p| debug!(position = format!("{p:?}"), "returning seek position"))
     }
 }

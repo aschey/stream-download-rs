@@ -71,7 +71,7 @@ impl Read for TempStorageReader {
 }
 
 impl Seek for TempStorageReader {
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        self.reader.seek(pos)
+    fn seek(&mut self, position: io::SeekFrom) -> io::Result<u64> {
+        self.reader.seek(position)
     }
 }
