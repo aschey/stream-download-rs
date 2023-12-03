@@ -10,7 +10,7 @@ repository = "https://github.com/aschey/stream-download-rs"
 description = "A library for streaming content to a local file-backed cache"
 categories = ["multimedia", "asynchronous", "caching"]
 keywords = ["audio", "stream", "media"]
-exclude = ["assets", ".github"]
+include = ["/src", "/examples", "/tests"]
 
 [dependencies]
 async-trait = "0.1.9"
