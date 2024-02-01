@@ -44,7 +44,7 @@ jobs:
           cargo test --doc
           RUST_LOG=trace cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           verbose: true
           fail_ci_if_error: true
