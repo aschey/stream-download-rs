@@ -5,7 +5,6 @@ use std::io::{self, SeekFrom};
 use std::ops::Range;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -129,7 +128,7 @@ impl PositionReached {
         }
 
         #[cfg(debug_assertions)]
-        let wait_start = Instant::now();
+        let wait_start = std::time::Instant::now();
 
         cvar.wait_while(&mut waiter, |waiter| {
             !waiter.stream_done && !waiter.position_reached
@@ -214,7 +213,7 @@ impl<H: StorageWriter> Source<H> {
         debug!("starting file download");
 
         #[cfg(debug_assertions)]
-        let download_start = Instant::now();
+        let download_start = std::time::Instant::now();
 
         loop {
             tokio::select! {
@@ -223,7 +222,6 @@ impl<H: StorageWriter> Source<H> {
                     if self.should_seek(position)? {
                         debug!("seek position not yet downloaded");
 
-                        #[cfg(debug_assertions)]
                         if !self.prefetch_complete {
                             debug!("seeking during prefetch, ending prefetch early");
                             self.downloaded.add(0.. self.writer.stream_position()?);
@@ -235,6 +233,7 @@ impl<H: StorageWriter> Source<H> {
                 },
                 bytes = stream.next() => {
                     if self.handle_bytes(&mut stream, bytes).await? == DownloadStatus::Complete {
+                        #[cfg(debug_assertions)]
                         debug!(
                             download_duration = format!("{:?}", download_start.elapsed()),
                             "stream finished downloading"

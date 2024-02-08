@@ -51,6 +51,23 @@ jobs:
           verbose: true
           fail_ci_if_error: true
           files: ./codecov.json
+  release-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+      - name: Minimal build
+        run: cargo build --release --no-default-features
+      - name: Build all
+        run: cargo build --release --all-features --examples
 
   min-versions:
     name: Check min dependency versions
