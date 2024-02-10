@@ -70,12 +70,20 @@ where
         };
 
         let (reader, writer) = self.inner.into_reader_writer(Some(buffer_size))?;
+
+        let buffer_size: usize = buffer_size.try_into().map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Requested buffer size of {buffer_size} exceeds the maximum value: {e}"),
+            )
+        })?;
+
         let shared_info = Arc::new(Mutex::new(SharedInfo {
             read: 0,
             written: 0,
             read_position: 0,
             write_position: 0,
-            size: buffer_size as usize,
+            size: buffer_size,
         }));
         let reader = BoundedStorageReader {
             inner: reader,

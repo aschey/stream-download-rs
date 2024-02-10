@@ -21,7 +21,17 @@ impl StorageProvider for MemoryStorageProvider {
         self,
         content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
-        let inner = Arc::new(RwLock::new(vec![0; content_length.unwrap_or(0) as usize]));
+        let initial_buffer_size = content_length.unwrap_or(0);
+        let initial_buffer_size: usize = initial_buffer_size.try_into().map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Requested buffer size of {initial_buffer_size} exceeds the maximum value: {e}"
+                ),
+            )
+        })?;
+
+        let inner = Arc::new(RwLock::new(vec![0; initial_buffer_size]));
         let written = Arc::new(AtomicUsize::new(0));
         let reader = MemoryStorage {
             inner: inner.clone(),
