@@ -1,6 +1,7 @@
 //! Storage wrappers for restricting the size of the underlying storage layer.
 //! This is useful for dealing with infinite streams when you don't want the storage size to keep
-//! growing indefinitely.
+//! growing indefinitely. It can also be used for downloading large files where you want to prevent
+//! allocating too much space at one time.
 //!
 //! The underlying data is used as a circular buffer - once it reaches capacity, it will begin to
 //! overwrite old data.
@@ -8,6 +9,10 @@
 //! Because the buffer will never resize, it's important to ensure the buffer is large enough to
 //! hold all of the data you will need at once. This needs to account for any seeking that may occur
 //! as well as the size of the initial prefetch phase.
+//!
+//! If your inputs may or may not have a known content length, consider using an
+//! [AdaptiveStorageProvider](super::adaptive::AdaptiveStorageProvider) to automatically
+//! determine whether or not the overhead of maintaining a bounded buffer is necessary.
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
@@ -26,7 +31,7 @@ where
     T: StorageProvider,
 {
     inner: T,
-    size: usize,
+    buffer_size: usize,
 }
 
 impl<T> BoundedStorageProvider<T>
@@ -34,10 +39,14 @@ where
     T: StorageProvider,
 {
     /// Creates a new [`BoundedStorageProvider`] with the specified fixed buffer size.
-    pub fn new(inner: T, size: NonZeroUsize) -> Self {
+    ///
+    /// **Note:** If the source has a known content length, the argument provided to `buffer_size`
+    /// will be compared with the content length and the smaller of the two sizes will be used.
+    /// This prevents excess allocations when the source is smaller than the buffer.
+    pub fn new(inner: T, buffer_size: NonZeroUsize) -> Self {
         Self {
             inner,
-            size: size.get(),
+            buffer_size: buffer_size.get(),
         }
     }
 }
@@ -53,14 +62,20 @@ where
         self,
         content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
-        let content_length = content_length.unwrap_or(self.size as u64);
-        let (reader, writer) = self.inner.into_reader_writer(Some(content_length))?;
+        // We need to take the smaller of the two sizes here to prevent excess memory allocation
+        let buffer_size = if let Some(content_length) = content_length {
+            content_length.min(self.buffer_size as u64)
+        } else {
+            self.buffer_size as u64
+        };
+
+        let (reader, writer) = self.inner.into_reader_writer(Some(buffer_size))?;
         let shared_info = Arc::new(Mutex::new(SharedInfo {
             read: 0,
             written: 0,
             read_position: 0,
             write_position: 0,
-            size: self.size,
+            size: buffer_size as usize,
         }));
         let reader = BoundedStorageReader {
             inner: reader,
