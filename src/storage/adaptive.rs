@@ -2,8 +2,8 @@
 //! not known. In this scenario, it is assumed that the source is an infinite
 //! stream.
 //!
-//! This module is useful when you want to need to support both infinite and finite streams without
-//! explicitly checking.
+//! This module is useful when you want to need to support both infinite and finite streams while
+//! avoiding the overhead of using a bounded buffer when it's not necessary.
 
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
@@ -58,8 +58,8 @@ where
             let writer = AdaptiveStorageWriter::Unbounded(writer);
             Ok((reader, writer))
         } else {
-            let provier = BoundedStorageProvider::new(self.inner.clone(), self.size);
-            let (reader, writer) = provier.into_reader_writer(content_length)?;
+            let provider = BoundedStorageProvider::new(self.inner.clone(), self.size);
+            let (reader, writer) = provider.into_reader_writer(content_length)?;
             let reader = AdaptiveStorageReader::Bounded(reader);
             let writer = AdaptiveStorageWriter::Bounded(writer);
             Ok((reader, writer))
