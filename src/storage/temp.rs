@@ -1,26 +1,43 @@
 //! Storage implementations for reading and writing to a temporary file. If the content length is
 //! known, the buffer size will be initialized to the content length, but the buffer will expand
 //! beyond that if required.
+use std::ffi::OsString;
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek};
 use std::path::PathBuf;
+use std::sync::Arc;
 
+pub use tempfile;
 use tempfile::NamedTempFile;
 
 use super::StorageProvider;
 use crate::WrapIoResult;
 
+type TempfileFnType = Arc<dyn Fn() -> io::Result<NamedTempFile> + Send + Sync + 'static>;
+
+#[derive(Clone)]
+struct TempfileFn(TempfileFnType);
+
+impl Debug for TempfileFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TempfileFn")
+    }
+}
+
 /// Creates a [`TempStorageReader`] backed by a temporary file
 #[derive(Default, Clone, Debug)]
 pub struct TempStorageProvider {
     storage_dir: Option<PathBuf>,
+    prefix: Option<OsString>,
+    tempfile_fn: Option<TempfileFn>,
 }
 
 impl TempStorageProvider {
     /// Creates a new [`TempStorageProvider`] that creates temporary files in the OS-specific
     /// default location.
     pub fn new() -> Self {
-        Self { storage_dir: None }
+        Self::default()
     }
 
     /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified
@@ -28,6 +45,50 @@ impl TempStorageProvider {
     pub fn new_in(path: impl Into<PathBuf>) -> Self {
         Self {
             storage_dir: Some(path.into()),
+            tempfile_fn: None,
+            prefix: None,
+        }
+    }
+
+    /// Creates a new [`TempStorageProvider`] that creates temporary files using the specified
+    /// filename prefix.
+    pub fn with_prefix(prefix: impl Into<OsString>) -> Self {
+        Self {
+            storage_dir: None,
+            tempfile_fn: None,
+            prefix: Some(prefix.into()),
+        }
+    }
+
+    /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified location
+    /// using the specified filename prefix.
+    pub fn with_prefix_in(prefix: impl Into<OsString>, path: impl Into<PathBuf>) -> Self {
+        Self {
+            storage_dir: Some(path.into()),
+            tempfile_fn: None,
+            prefix: Some(prefix.into()),
+        }
+    }
+
+    /// Creates a new [`TempStorageProvider`] with a custom [`tempfile::NamedTempFile`]
+    /// builder.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use stream_download::storage::temp::{tempfile, TempStorageProvider};
+    ///
+    /// TempStorageProvider::with_tempfile_builder(|| {
+    ///     tempfile::Builder::new().suffix("testfile").tempfile()
+    /// });
+    /// ```
+    pub fn with_tempfile_builder<F: Fn() -> io::Result<NamedTempFile> + Send + Sync + 'static>(
+        builder: F,
+    ) -> Self {
+        Self {
+            storage_dir: None,
+            prefix: None,
+            tempfile_fn: Some(TempfileFn(Arc::new(builder))),
         }
     }
 }
@@ -40,10 +101,19 @@ impl StorageProvider for TempStorageProvider {
         self,
         _content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
-        let tempfile = if let Some(dir) = &self.storage_dir {
-            NamedTempFile::new_in(dir)
+        let tempfile = if let Some(tempfile_fn) = self.tempfile_fn {
+            (tempfile_fn.0)()
         } else {
-            NamedTempFile::new()
+            let mut builder = tempfile::Builder::new();
+            let mut builder_mut = &mut builder;
+            if let Some(prefix) = &self.prefix {
+                builder_mut = builder_mut.prefix(prefix);
+            }
+            if let Some(dir) = self.storage_dir {
+                builder_mut.tempfile_in(dir)
+            } else {
+                builder_mut.tempfile()
+            }
         }
         .wrap_err("error creating temp file")?;
 
