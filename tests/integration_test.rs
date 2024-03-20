@@ -313,13 +313,23 @@ fn basic_download(
 }
 
 #[rstest]
-fn temp_dir() {
+fn tempfile_builder(
+    #[values(
+        TempStorageProvider::new_in("./assets"),
+        TempStorageProvider::with_prefix("testfile"),
+        TempStorageProvider::with_prefix_in("testfile", "./assets"),
+        TempStorageProvider::with_tempfile_builder(|| {
+            tempfile::Builder::new().suffix("testfile").tempfile()
+        }),
+    )]
+    storage: TempStorageProvider,
+) {
     SERVER_RT.get().unwrap().block_on(async move {
         let mut reader = StreamDownload::new_http(
             format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                 .parse()
                 .unwrap(),
-            TempStorageProvider::new_in("./assets"),
+            storage,
             Settings::default(),
         )
         .await
@@ -336,7 +346,6 @@ fn temp_dir() {
 }
 
 #[rstest]
-
 fn slow_download(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
