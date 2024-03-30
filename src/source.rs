@@ -10,6 +10,7 @@ use bytes::Bytes;
 use futures::{Future, Stream, StreamExt};
 use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
+use tap::TapFallible;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
@@ -72,7 +73,10 @@ impl SourceHandle {
     }
 
     pub fn seek(&self, position: u64) {
-        self.seek_tx.try_send(position).ok();
+        self.seek_tx
+            .try_send(position)
+            .tap_err(|e| error!("Error sending seek request: {e:?}"))
+            .ok();
     }
 
     pub fn content_length(&self) -> Option<u64> {
@@ -192,7 +196,7 @@ pub(crate) struct Source<W: StorageWriter> {
 
 impl<H: StorageWriter> Source<H> {
     pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings) -> Self {
-        let (seek_tx, seek_rx) = mpsc::channel(32);
+        let (seek_tx, seek_rx) = mpsc::channel(settings.seek_buffer_size);
         Self {
             writer,
             downloaded: Default::default(),
