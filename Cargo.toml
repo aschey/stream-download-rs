@@ -19,8 +19,7 @@ futures = "0.3"
 mediatype = { version = "0.19", optional = true }
 parking_lot = "0.12.1"
 rangemap = "1"
-# reqwest 0.11.10 fixes serde_urlencoded dependency version which had incorrect serde dependency
-reqwest = { version = "0.11.10", features = [
+reqwest = { version = "0.12", features = [
   "stream",
 ], default-features = false, optional = true }
 tap = "1.0.1"
@@ -42,13 +41,13 @@ rodio = { version = "0.17.3", default-features = false, features = [
   "symphonia-all",
 ] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-tokio = { version = "1.36.0", features = ["sync", "macros", "rt-multi-thread"] }
+tokio = { version = "1.37.0", features = ["sync", "macros", "rt-multi-thread"] }
 tower-http = { version = "0.5.2", features = ["fs"] }
 tower = { version = "0.4.13", features = ["make"] }
 ctor = "0.2.7"
 rstest = "0.18.2"
 proptest = "1.4.0"
-axum = "0.7.4"
+axum = "0.7.5"
 
 [[example]]
 name = "basic_http"
