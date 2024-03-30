@@ -6,9 +6,8 @@ use std::ops::Range;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use bytes::Bytes;
-use futures::{Stream, StreamExt};
+use futures::{Future, Stream, StreamExt};
 use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tokio::sync::mpsc;
@@ -24,7 +23,6 @@ use crate::Settings;
 ///
 /// The implementation must also implement the
 /// [Stream](https://docs.rs/futures/latest/futures/stream/trait.Stream.html) trait.
-#[async_trait]
 pub trait SourceStream:
     Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync + Sized + 'static
 {
@@ -35,7 +33,7 @@ pub trait SourceStream:
     type StreamError: Error + Send;
 
     /// Creates an instance of the stream.
-    async fn create(url: Self::Url) -> io::Result<Self>;
+    fn create(url: Self::Url) -> impl Future<Output = io::Result<Self>> + Send;
 
     /// Returns the size of the remote resource in bytes. The result should be `None`
     /// if the stream is infinite or doesn't have a known length.
@@ -44,7 +42,11 @@ pub trait SourceStream:
     /// Seeks to a specific position in the stream. This method is only called if the
     /// requested range has not been downloaded, so this method should jump to the
     /// requested position in the stream as quickly as possible.
-    async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()>;
+    fn seek_range(
+        &mut self,
+        start: u64,
+        end: Option<u64>,
+    ) -> impl Future<Output = io::Result<()>> + Send;
 }
 
 #[derive(Debug, Clone)]

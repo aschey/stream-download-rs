@@ -7,7 +7,6 @@ use std::{fs, io};
 
 mod setup;
 
-use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use rstest::rstest;
@@ -114,7 +113,6 @@ impl TestClient {
     }
 }
 
-#[async_trait]
 impl http::Client for TestClient {
     type Url = reqwest::Url;
     type Response = TestResponse;
