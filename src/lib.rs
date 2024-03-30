@@ -23,12 +23,14 @@ pub mod storage;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     prefetch_bytes: u64,
+    seek_buffer_size: usize,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             prefetch_bytes: 256 * 1024,
+            seek_buffer_size: 128,
         }
     }
 }
@@ -37,14 +39,35 @@ impl Settings {
     /// How many bytes to download from the stream before allowing read requests.
     /// This is used to create a buffer between the read position and the stream position
     /// and prevent stuttering.
+    ///
     /// The default value is 256 kilobytes.
     pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
-        Self { prefetch_bytes }
+        Self {
+            prefetch_bytes,
+            ..self
+        }
+    }
+
+    /// The internal buffer size used to process seek requests.
+    /// You shouldn't need to mess with this unless your application performs a lot of seek
+    /// requests and you're seeing error messages from the buffer filling up.
+    ///
+    /// The default value is 128.
+    pub fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
+        Self {
+            seek_buffer_size,
+            ..self
+        }
     }
 
     /// Retrieves the configured prefetch bytes
     pub fn get_prefetch_bytes(&self) -> u64 {
         self.prefetch_bytes
+    }
+
+    /// Retrieves the configured seek buffer size
+    pub fn get_seek_buffer_size(&self) -> usize {
+        self.seek_buffer_size
     }
 }
 
