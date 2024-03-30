@@ -1,7 +1,6 @@
 use std::str::FromStr;
 use std::sync::OnceLock;
 
-use async_trait::async_trait;
 use bytes::Bytes;
 use futures::Stream;
 use reqwest::header::{self, AsHeaderName, HeaderMap};
@@ -60,7 +59,6 @@ impl ClientResponse for reqwest::Response {
 // per reqwest's docs, it's advisable to create a single client and reuse it
 static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
-#[async_trait]
 impl Client for reqwest::Client {
     type Url = reqwest::Url;
     type Response = reqwest::Response;

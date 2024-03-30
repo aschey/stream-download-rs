@@ -35,9 +35,8 @@ use std::pin::Pin;
 use std::task::{self, Poll};
 use std::time::Instant;
 
-use async_trait::async_trait;
 use bytes::Bytes;
-use futures::Stream;
+use futures::{Future, Stream};
 use mediatype::MediaTypeBuf;
 #[cfg(feature = "reqwest")]
 pub use reqwest;
@@ -52,7 +51,6 @@ mod reqwest_client;
 /// stream content. If the `reqwest` feature is enabled, this trait is implemented for
 /// [reqwest::Client](https://docs.rs/reqwest/latest/reqwest/struct.Client.html).
 /// This can be implemented for a custom HTTP client if desired.
-#[async_trait]
 pub trait Client: Send + Sync + Unpin + 'static {
     /// The HTTP URL of the remote resource.
     type Url: Display + Send + Sync + Unpin;
@@ -70,16 +68,19 @@ pub trait Client: Send + Sync + Unpin + 'static {
     fn create() -> Self;
 
     /// Sends an HTTP GET request to the URL.
-    async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error>;
+    fn get(
+        &self,
+        url: &Self::Url,
+    ) -> impl Future<Output = Result<Self::Response, Self::Error>> + Send;
 
     /// Sends an HTTP GET request to the URL utilizing the `Range` header to request a specific part
     /// of the stream.
-    async fn get_range(
+    fn get_range(
         &self,
         url: &Self::Url,
         start: u64,
         end: Option<u64>,
-    ) -> Result<Self::Response, Self::Error>;
+    ) -> impl Future<Output = Result<Self::Response, Self::Error>> + Send;
 }
 
 /// Represents the content type HTTP response header
@@ -218,7 +219,6 @@ impl<C: Client> Stream for HttpStream<C> {
     }
 }
 
-#[async_trait]
 impl<C: Client> SourceStream for HttpStream<C> {
     type Url = C::Url;
     type StreamError = C::Error;
