@@ -12,6 +12,7 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tap::TapFallible;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TrySendError;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -75,7 +76,11 @@ impl SourceHandle {
     pub fn seek(&self, position: u64) {
         self.seek_tx
             .try_send(position)
-            .tap_err(|e| error!("Error sending seek request: {e:?}"))
+            .tap_err(|e| {
+                if let TrySendError::Full(capacity) = e {
+                    error!("Seek buffer full. Capacity: {capacity}")
+                }
+            })
             .ok();
     }
 
