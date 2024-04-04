@@ -71,12 +71,12 @@ where
 
         let (reader, writer) = self.inner.into_reader_writer(Some(buffer_size))?;
 
-        let buffer_size: usize = buffer_size.try_into().map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Requested buffer size of {buffer_size} exceeds the maximum value: {e}"),
-            )
-        })?;
+        let buffer_size: usize = buffer_size
+            .try_into()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+            .wrap_err(&format!(
+                "Requested buffer size of {buffer_size} exceeds the maximum value"
+            ))?;
 
         let shared_info = Arc::new(Mutex::new(SharedInfo {
             read: 0,

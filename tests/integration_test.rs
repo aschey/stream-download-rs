@@ -283,6 +283,23 @@ fn from_stream(#[case] prefetch_bytes: u64) {
 }
 
 #[rstest]
+fn handle_error() {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let reader = StreamDownload::new_http(
+            format!("http://{}/invalid.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            MemoryStorageProvider,
+            Settings::default(),
+        )
+        .await;
+        assert!(reader.is_err());
+        let err = reader.unwrap_err();
+        assert_eq!(io::ErrorKind::InvalidInput, err.kind());
+    });
+}
+
+#[rstest]
 fn basic_download(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider

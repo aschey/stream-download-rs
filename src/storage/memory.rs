@@ -8,6 +8,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 
 use super::StorageProvider;
+use crate::WrapIoResult;
 
 /// Creates a [`MemoryStorage`] with an initial size based on the supplied content length.
 #[derive(Default, Clone, Debug)]
@@ -22,14 +23,12 @@ impl StorageProvider for MemoryStorageProvider {
         content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
         let initial_buffer_size = content_length.unwrap_or(0);
-        let initial_buffer_size: usize = initial_buffer_size.try_into().map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "Requested buffer size of {initial_buffer_size} exceeds the maximum value: {e}"
-                ),
-            )
-        })?;
+        let initial_buffer_size: usize = initial_buffer_size
+            .try_into()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+            .wrap_err(&format!(
+                "Requested buffer size of {initial_buffer_size} exceeds the maximum value"
+            ))?;
 
         let inner = Arc::new(RwLock::new(vec![0; initial_buffer_size]));
         let written = Arc::new(AtomicUsize::new(0));
