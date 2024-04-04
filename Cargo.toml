@@ -29,11 +29,11 @@ tracing = "0.1.36"
 
 [features]
 default = ["reqwest", "temp-storage"]
-http = ["mediatype"]
+http = ["dep:mediatype"]
 reqwest = ["http", "dep:reqwest"]
 reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
 reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
-temp-storage = ["tempfile"]
+temp-storage = ["dep:tempfile"]
 
 [dev-dependencies]
 rodio = { version = "0.17.3", default-features = false, features = [

@@ -43,6 +43,7 @@ pub use reqwest;
 use tracing::{debug, instrument, warn};
 
 use crate::source::SourceStream;
+use crate::WrapIoResult;
 
 #[cfg(feature = "reqwest")]
 mod reqwest_client;
@@ -151,12 +152,15 @@ impl<C: Client> HttpStream<C> {
         let response = client
             .get(&url)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+            .wrap_err(&format!("error fetching {url}"))?;
         debug!(
             duration = format!("{:?}", request_start.elapsed()),
             "request finished"
         );
 
+        let response = check_error_response(response, "unknown error from HTTP request")
+            .wrap_err(&format!("error fetching {url}"))?;
         let content_length = if let Some(content_length) = response.content_length() {
             debug!(content_length, "received content length");
             Some(content_length)
@@ -247,23 +251,33 @@ impl<C: Client> SourceStream for HttpStream<C> {
             .client
             .get_range(&self.url, start, end)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+            .wrap_err(&format!("error sending HTTP range request to {}", self.url))?;
         debug!(
             duration = format!("{:?}", request_start.elapsed()),
             "HTTP request finished"
         );
-        if !response.is_success() {
-            if let Err(e) = response.status_error() {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
-            } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "unknown error from HTTP range request",
-                ));
-            }
-        }
+
+        let response = check_error_response(response, "unknown error from HTTP range request")
+            .wrap_err(&format!("error sending HTTP range request to {}", self.url))?;
         self.stream = Box::new(response.stream());
         debug!("done seeking");
         Ok(())
     }
+}
+
+fn check_error_response<R>(response: R, fallback_msg: &str) -> io::Result<R>
+where
+    R: ClientResponse,
+    <R as ClientResponse>::Error: Error + Send + Sync + 'static,
+{
+    if !response.is_success() {
+        if let Err(e) = response.status_error() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
+        } else {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, fallback_msg));
+        }
+    }
+
+    Ok(response)
 }
