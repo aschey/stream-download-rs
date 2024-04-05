@@ -7,6 +7,7 @@ use reqwest::header::{self, AsHeaderName, HeaderMap};
 use tap::TapFallible;
 use tracing::warn;
 
+use super::{format_range_header_bytes, RANGE_HEADER_KEY};
 use crate::http::{Client, ClientResponse, ResponseHeaders};
 
 impl ResponseHeaders for HeaderMap {
@@ -80,13 +81,7 @@ impl Client for reqwest::Client {
         end: Option<u64>,
     ) -> Result<Self::Response, Self::Error> {
         self.get(url.clone())
-            .header(
-                "Range",
-                format!(
-                    "bytes={start}-{}",
-                    end.map(|e| e.to_string()).unwrap_or_default()
-                ),
-            )
+            .header(RANGE_HEADER_KEY, format_range_header_bytes(start, end))
             .send()
             .await
     }

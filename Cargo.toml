@@ -54,6 +54,11 @@ required-features = ["reqwest"]
 doc-scrape-examples = true
 
 [[example]]
+name = "client_options"
+required-features = ["reqwest", "temp-storage"]
+doc-scrape-examples = true
+
+[[example]]
 name = "custom_client"
 required-features = ["reqwest", "temp-storage"]
 doc-scrape-examples = true
