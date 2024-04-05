@@ -12,9 +12,12 @@ If you have [cargo make](https://github.com/sagiegurari/cargo-make) installed, y
 
 ## Conventional commits
 
-We use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) and verify them on build.
+We use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for creating changelogs.
 These are checked using [committed](https://github.com/crate-ci/committed).
 If you install the git hooks, these are checked before commit.
+
+You don't have to use the conventional style for your commits if you don't want to, but please make your PR title use it.
+We squash merge PRs so the PR title will be the commit message going into `main`.
 
 ## Formatting
 

@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let sink = rodio::Sink::try_new(&handle)?;
 
     // If you need to add some custom options to your HTTP client,
-    // construct it manually and pass is it into `HttpStream::new`.
+    // construct it manually and pass it into `HttpStream::new`.
     let mut headers = HeaderMap::new();
     // For example, you may need to add some authentication headers with every request.
     // If you need to support a more complex authentication scheme, see the `custom_client` example.
