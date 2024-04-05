@@ -266,6 +266,19 @@ impl<C: Client> SourceStream for HttpStream<C> {
     }
 }
 
+/// HTTP range header key
+pub const RANGE_HEADER_KEY: &str = "Range";
+
+/// Utility function to format a range header for requesting bytes.
+///
+/// ex: `bytes=200-400`
+pub fn format_range_header_bytes(start: u64, end: Option<u64>) -> String {
+    format!(
+        "bytes={start}-{}",
+        end.map(|e| e.to_string()).unwrap_or_default()
+    )
+}
+
 fn check_error_response<R>(response: R, fallback_msg: &str) -> io::Result<R>
 where
     R: ClientResponse,

@@ -197,6 +197,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
+## Authentication and other customization
+
+It's possible to customize your HTTP requests if you need to perform authentication or change other settings.
+
+See [client_options](https://github.com/aschey/stream-download-rs/blob/main/examples/client_options.rs) for customizing the HTTP client builder.
+
+See [custom_client](https://github.com/aschey/stream-download-rs/blob/main/examples/custom_client.rs) for dynamically modifying each HTTP request.
+
 ## Supported Rust Versions
 
 The MSRV is currently `1.75.0`.
