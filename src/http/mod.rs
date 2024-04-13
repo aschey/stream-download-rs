@@ -29,7 +29,7 @@
 //! ```
 
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::io;
 use std::pin::Pin;
 use std::task::{self, Poll};
@@ -142,6 +142,19 @@ pub struct HttpStream<C: Client> {
     headers: C::Headers,
 }
 
+impl<C: Client> fmt::Debug for HttpStream<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HttpStream")
+            .field("stream", &"<stream>")
+            .field("client", &"<client>")
+            .field("content_length", &self.content_length)
+            .field("content_type", &self.content_type)
+            .field("url", &self.url.to_string())
+            .field("headers", &"<headers>")
+            .finish()
+    }
+}
+
 impl<C: Client> HttpStream<C> {
     /// Creates a new [HttpStream] from a [Client].
     #[instrument(skip(client, url), fields(url = url.to_string()))]
@@ -161,30 +174,36 @@ impl<C: Client> HttpStream<C> {
 
         let response = check_error_response(response, "unknown error from HTTP request")
             .wrap_err(&format!("error fetching {url}"))?;
-        let content_length = if let Some(content_length) = response.content_length() {
-            debug!(content_length, "received content length");
-            Some(content_length)
-        } else {
-            warn!("content length header missing");
-            None
-        };
+        let content_length = response.content_length().map_or_else(
+            || {
+                warn!("content length header missing");
+                None
+            },
+            |content_length| {
+                debug!(content_length, "received content length");
+                Some(content_length)
+            },
+        );
 
-        let content_type = if let Some(content_type) = response.content_type() {
-            debug!(content_type, "received content type");
-            match content_type.parse::<MediaTypeBuf>() {
-                Ok(content_type) => Some(ContentType {
-                    r#type: content_type.ty().to_string(),
-                    subtype: content_type.subty().to_string(),
-                }),
-                Err(e) => {
-                    warn!("error parsing content type: {e:?}");
-                    None
+        let content_type = response.content_type().map_or_else(
+            || {
+                warn!("content type header missing");
+                None
+            },
+            |content_type| {
+                debug!(content_type, "received content type");
+                match content_type.parse::<MediaTypeBuf>() {
+                    Ok(content_type) => Some(ContentType {
+                        r#type: content_type.ty().to_string(),
+                        subtype: content_type.subty().to_string(),
+                    }),
+                    Err(e) => {
+                        warn!("error parsing content type: {e:?}");
+                        None
+                    }
                 }
-            }
-        } else {
-            warn!("content type header missing");
-            None
-        };
+            },
+        );
 
         let headers = response.headers();
         let stream = response.stream();
@@ -284,13 +303,13 @@ where
     R: ClientResponse,
     <R as ClientResponse>::Error: Error + Send + Sync + 'static,
 {
-    if !response.is_success() {
-        if let Err(e) = response.status_error() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
-        } else {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, fallback_msg));
-        }
+    if response.is_success() {
+        return Ok(response);
     }
 
-    Ok(response)
+    if let Err(e) = response.status_error() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
+    }
+
+    Err(io::Error::new(io::ErrorKind::InvalidInput, fallback_msg))
 }

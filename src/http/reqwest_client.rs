@@ -67,7 +67,7 @@ impl Client for reqwest::Client {
     type Headers = HeaderMap;
 
     fn create() -> Self {
-        CLIENT.get_or_init(reqwest::Client::new).clone()
+        CLIENT.get_or_init(Self::new).clone()
     }
 
     async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error> {

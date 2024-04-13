@@ -11,7 +11,7 @@
 //! as well as the size of the initial prefetch phase.
 //!
 //! If your inputs may or may not have a known content length, consider using an
-//! [AdaptiveStorageProvider](super::adaptive::AdaptiveStorageProvider) to automatically
+//! [`AdaptiveStorageProvider`](super::adaptive::AdaptiveStorageProvider) to automatically
 //! determine whether or not the overhead of maintaining a bounded buffer is necessary.
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -131,6 +131,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BoundedStorageReader")
+            .field("inner", &"<inner>")
             .field("shared_info", &self.shared_info)
             .finish()
     }
@@ -256,6 +257,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BoundedStorageWriter")
+            .field("inner", &"<inner>")
             .field("shared_info", &self.shared_info)
             .finish()
     }
