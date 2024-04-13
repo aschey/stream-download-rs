@@ -2,6 +2,13 @@
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![warn(clippy::semicolon_if_nothing_returned)]
+#![warn(clippy::doc_markdown)]
+#![warn(clippy::default_trait_access)]
+#![warn(clippy::ignored_unit_patterns)]
+#![warn(clippy::semicolon_if_nothing_returned)]
+#![warn(clippy::missing_fields_in_debug)]
+#![warn(clippy::use_self)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
@@ -41,7 +48,8 @@ impl Settings {
     /// and prevent stuttering.
     ///
     /// The default value is 256 kilobytes.
-    pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
+    #[must_use]
+    pub const fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
         Self {
             prefetch_bytes,
             ..self
@@ -53,7 +61,8 @@ impl Settings {
     /// requests and you're seeing error messages from the buffer filling up.
     ///
     /// The default value is 128.
-    pub fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
+    #[must_use]
+    pub const fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
         Self {
             seek_buffer_size,
             ..self
@@ -61,12 +70,12 @@ impl Settings {
     }
 
     /// Retrieves the configured prefetch bytes
-    pub fn get_prefetch_bytes(&self) -> u64 {
+    pub const fn get_prefetch_bytes(&self) -> u64 {
         self.prefetch_bytes
     }
 
     /// Retrieves the configured seek buffer size
-    pub fn get_seek_buffer_size(&self) -> usize {
+    pub const fn get_seek_buffer_size(&self) -> usize {
         self.seek_buffer_size
     }
 }
@@ -298,11 +307,10 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
                     trace!(
                         read_length = format!("{l:?}"),
                         "requested position already downloaded, returning read"
-                    )
+                    );
                 });
-            } else {
-                debug!("requested position not yet downloaded");
             }
+            debug!("requested position not yet downloaded");
         } else {
             debug!("stream position not yet downloaded");
         }

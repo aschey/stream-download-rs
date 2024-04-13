@@ -20,7 +20,7 @@ use crate::storage::StorageWriter;
 use crate::Settings;
 
 /// Represents a remote resource that can be streamed over the network. Streaming
-/// over http is implemented via the [HttpStream](crate::http::HttpStream)
+/// over http is implemented via the [`HttpStream`](crate::http::HttpStream)
 /// implementation if the `http` feature is enabled.
 ///
 /// The implementation must also implement the
@@ -70,7 +70,7 @@ impl SourceHandle {
     }
 
     pub fn wait_for_requested_position(&self) {
-        self.position_reached.wait_for_position_reached()
+        self.position_reached.wait_for_position_reached();
     }
 
     pub fn seek(&self, position: u64) {
@@ -78,7 +78,7 @@ impl SourceHandle {
             .try_send(position)
             .tap_err(|e| {
                 if let TrySendError::Full(capacity) = e {
-                    error!("Seek buffer full. Capacity: {capacity}")
+                    error!("Seek buffer full. Capacity: {capacity}");
                 }
             })
             .ok();
@@ -162,7 +162,7 @@ struct Downloaded(Arc<RwLock<RangeSet<u64>>>);
 impl Downloaded {
     fn add(&self, range: Range<u64>) {
         if range.end > range.start {
-            self.0.write().insert(range)
+            self.0.write().insert(range);
         }
     }
 
@@ -204,9 +204,9 @@ impl<H: StorageWriter> Source<H> {
         let (seek_tx, seek_rx) = mpsc::channel(settings.seek_buffer_size);
         Self {
             writer,
-            downloaded: Default::default(),
+            downloaded: Downloaded::default(),
             requested_position: RequestedPosition::default(),
-            position_reached: Default::default(),
+            position_reached: PositionReached::default(),
             seek_tx,
             seek_rx,
             content_length,
@@ -252,7 +252,7 @@ impl<H: StorageWriter> Source<H> {
                         break;
                     }
                 }
-                _ = cancellation_token.cancelled() => {
+                () = cancellation_token.cancelled() => {
                     debug!("received cancellation request, stopping download task");
                     self.writer.flush()?;
                     self.signal_download_complete();
@@ -364,7 +364,7 @@ impl<H: StorageWriter> Source<H> {
 
             if new_position >= requested {
                 self.requested_position.clear();
-                self.position_reached.notify_position_reached()
+                self.position_reached.notify_position_reached();
             }
         }
         Ok(DownloadStatus::Continue)
@@ -395,7 +395,7 @@ impl<H: StorageWriter> Source<H> {
     }
 
     fn signal_download_complete(&self) {
-        self.position_reached.notify_stream_done()
+        self.position_reached.notify_stream_done();
     }
 
     pub(crate) fn source_handle(&self) -> SourceHandle {

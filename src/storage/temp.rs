@@ -109,11 +109,10 @@ impl StorageProvider for TempStorageProvider {
             if let Some(prefix) = &self.prefix {
                 builder_mut = builder_mut.prefix(prefix);
             }
-            if let Some(dir) = self.storage_dir {
-                builder_mut.tempfile_in(dir)
-            } else {
-                builder_mut.tempfile()
-            }
+            self.storage_dir.map_or_else(
+                || builder_mut.tempfile(),
+                |dir| builder_mut.tempfile_in(dir),
+            )
         }
         .wrap_err("error creating temp file")?;
 
