@@ -36,7 +36,7 @@ reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
 temp-storage = ["dep:tempfile"]
 
 [dev-dependencies]
-rodio = { version = "0.17.3", default-features = false, features = [
+rodio = { version = "0.18.1", default-features = false, features = [
   "symphonia-all",
 ] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
