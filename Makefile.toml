@@ -46,7 +46,7 @@ args = [
     "doc",
     "-Zunstable-options",
     "-Zrustdoc-scrape-examples",
-    "--all-features",
+    "--features=reqwest,temp-storage",
     "--no-deps",
     "--open",
 ]
@@ -64,7 +64,7 @@ args = [
     "doc",
     "-Zunstable-options",
     "-Zrustdoc-scrape-examples",
-    "--all-features",
+    "--features=reqwest,temp-storage",
     "--no-deps",
 ]
 install_crate = "watchexec-cli"
