@@ -8,6 +8,7 @@ use std::io::{self, BufReader, Read, Seek};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use educe::Educe;
 pub use tempfile;
 use tempfile::NamedTempFile;
 
@@ -16,14 +17,9 @@ use crate::WrapIoResult;
 
 type TempfileFnType = Arc<dyn Fn() -> io::Result<NamedTempFile> + Send + Sync + 'static>;
 
-#[derive(Clone)]
-struct TempfileFn(TempfileFnType);
-
-impl Debug for TempfileFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("TempfileFn")
-    }
-}
+#[derive(Clone, Educe)]
+#[educe(Debug)]
+struct TempfileFn(#[educe(Debug = false)] TempfileFnType);
 
 /// Creates a [`TempStorageReader`] backed by a temporary file
 #[derive(Default, Clone, Debug)]

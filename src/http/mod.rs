@@ -29,13 +29,14 @@
 //! ```
 
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::pin::Pin;
 use std::task::{self, Poll};
 use std::time::Instant;
 
 use bytes::Bytes;
+use educe::Educe;
 use futures::{Future, Stream};
 use mediatype::MediaTypeBuf;
 #[cfg(feature = "reqwest")]
@@ -132,27 +133,26 @@ pub trait ClientResponse: Send + Sync {
     fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync>;
 }
 
+fn fmt<T>(val: &T, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error>
+where
+    T: Display,
+{
+    write!(fmt, "{val}")
+}
+
 /// An HTTP implementation of the [`SourceStream`] trait.
+#[derive(Educe)]
+#[educe(Debug)]
 pub struct HttpStream<C: Client> {
+    #[educe(Debug = false)]
     stream: Box<dyn Stream<Item = Result<Bytes, C::Error>> + Unpin + Send + Sync>,
     client: C,
     content_length: Option<u64>,
     content_type: Option<ContentType>,
+    #[educe(Debug(method = "fmt"))]
     url: C::Url,
+    #[educe(Debug = false)]
     headers: C::Headers,
-}
-
-impl<C: Client> fmt::Debug for HttpStream<C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HttpStream")
-            .field("stream", &"<stream>")
-            .field("client", &"<client>")
-            .field("content_length", &self.content_length)
-            .field("content_type", &self.content_type)
-            .field("url", &self.url.to_string())
-            .field("headers", &"<headers>")
-            .finish()
-    }
 }
 
 impl<C: Client> HttpStream<C> {
