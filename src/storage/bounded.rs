@@ -13,11 +13,12 @@
 //! If your inputs may or may not have a known content length, consider using an
 //! [`AdaptiveStorageProvider`](super::adaptive::AdaptiveStorageProvider) to automatically
 //! determine whether or not the overhead of maintaining a bounded buffer is necessary.
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use educe::Educe;
 use parking_lot::Mutex;
 use tracing::{debug, instrument, trace, warn};
 
@@ -117,24 +118,15 @@ impl SharedInfo {
 }
 
 /// Reader created by a [`BoundedStorageProvider`]. Reads from a fixed-size circular buffer.
+#[derive(Educe)]
+#[educe(Debug)]
 pub struct BoundedStorageReader<T>
 where
     T: StorageReader,
 {
+    #[educe(Debug = false)]
     inner: T,
     shared_info: Arc<Mutex<SharedInfo>>,
-}
-
-impl<T> Debug for BoundedStorageReader<T>
-where
-    T: StorageReader,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BoundedStorageReader")
-            .field("inner", &"<inner>")
-            .field("shared_info", &self.shared_info)
-            .finish()
-    }
 }
 
 impl<T> Read for BoundedStorageReader<T>
@@ -143,6 +135,9 @@ where
 {
     #[instrument(skip(buf))]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
         let mut shared_info = self.shared_info.lock();
 
         if buf.len() > shared_info.size {
@@ -243,24 +238,15 @@ where
 }
 
 /// Write handle created by a [`BoundedStorageReader`]. Writes to a fixed-size circular buffer.
+#[derive(Educe)]
+#[educe(Debug)]
 pub struct BoundedStorageWriter<T>
 where
     T: StorageWriter,
 {
+    #[educe(Debug = false)]
     inner: T,
     shared_info: Arc<Mutex<SharedInfo>>,
-}
-
-impl<T> Debug for BoundedStorageWriter<T>
-where
-    T: StorageWriter,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BoundedStorageWriter")
-            .field("inner", &"<inner>")
-            .field("shared_info", &self.shared_info)
-            .finish()
-    }
 }
 
 impl<T> Write for BoundedStorageWriter<T>

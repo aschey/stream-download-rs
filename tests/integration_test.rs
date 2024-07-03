@@ -11,6 +11,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use rstest::rstest;
 use setup::{SERVER_ADDR, SERVER_RT};
+use stream_download::http::HttpStream;
 use stream_download::source::SourceStream;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
@@ -783,5 +784,186 @@ fn cancel_download(#[case] prefetch_bytes: u64) {
         })
         .await
         .unwrap();
+    });
+}
+
+#[rstest]
+#[case(1)]
+#[case(1024)]
+fn on_progress(#[case] prefetch_bytes: u64) {
+    use stream_download::StreamState;
+
+    let (tx, mut rx) = mpsc::channel::<(Option<u64>, StreamState)>(10000);
+
+    SERVER_RT.get().unwrap().block_on(async move {
+        let progress_task = tokio::spawn(async move {
+            let next = rx.recv().await.unwrap();
+            assert!(matches!(
+                next.1.phase,
+                stream_download::StreamPhase::Prefetching { .. }
+            ));
+            loop {
+                let next = rx.recv().await.unwrap();
+                if !matches!(
+                    next.1.phase,
+                    stream_download::StreamPhase::Prefetching { .. }
+                ) {
+                    assert!(matches!(
+                        next.1.phase,
+                        stream_download::StreamPhase::Downloading { .. }
+                    ));
+                    break;
+                }
+            }
+            loop {
+                let next = rx.recv().await.unwrap();
+                if !matches!(
+                    next.1.phase,
+                    stream_download::StreamPhase::Downloading { .. }
+                ) {
+                    assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
+                    return next.0.unwrap();
+                }
+            }
+        });
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            TempStorageProvider::default(),
+            Settings::default()
+                .prefetch_bytes(prefetch_bytes)
+                .on_progress(move |stream: &HttpStream<_>, info| {
+                    let _ = tx.try_send((stream.content_length(), info));
+                }),
+        )
+        .await
+        .unwrap();
+
+        let read_bytes = spawn_blocking(move || {
+            let mut read_bytes = 0;
+            let mut buf = [0; 4096];
+            loop {
+                let next = reader.read(&mut buf).unwrap();
+                if next == 0 {
+                    return read_bytes;
+                }
+                read_bytes += next;
+            }
+        });
+        let read_bytes = read_bytes.await.unwrap();
+        let last_content_length = progress_task.await.unwrap();
+        assert_eq!(read_bytes as u64, last_content_length);
+    });
+}
+
+#[rstest]
+fn on_progress_no_prefetch() {
+    use stream_download::StreamState;
+
+    let (tx, mut rx) = mpsc::channel::<(Option<u64>, StreamState)>(10000);
+
+    SERVER_RT.get().unwrap().block_on(async move {
+        let progress_task = tokio::spawn(async move {
+            let next = rx.recv().await.unwrap();
+            assert!(matches!(
+                next.1.phase,
+                stream_download::StreamPhase::Downloading { .. }
+            ));
+            loop {
+                let next = rx.recv().await.unwrap();
+                if !matches!(
+                    next.1.phase,
+                    stream_download::StreamPhase::Downloading { .. }
+                ) {
+                    assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
+                    return next.0.unwrap();
+                }
+            }
+        });
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            TempStorageProvider::default(),
+            Settings::default().prefetch_bytes(0).on_progress(
+                move |stream: &HttpStream<_>, info| {
+                    let _ = tx.try_send((stream.content_length(), info));
+                },
+            ),
+        )
+        .await
+        .unwrap();
+
+        let read_bytes = spawn_blocking(move || {
+            let mut read_bytes = 0;
+            let mut buf = [0; 4096];
+            loop {
+                let next = reader.read(&mut buf).unwrap();
+                if next == 0 {
+                    return read_bytes;
+                }
+                read_bytes += next;
+            }
+        });
+        let read_bytes = read_bytes.await.unwrap();
+        let last_content_length = progress_task.await.unwrap();
+        assert_eq!(read_bytes as u64, last_content_length);
+    });
+}
+
+#[rstest]
+#[case(512*1024)]
+fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
+    use stream_download::StreamState;
+
+    let (tx, mut rx) = mpsc::channel::<(Option<u64>, StreamState)>(10000);
+
+    SERVER_RT.get().unwrap().block_on(async move {
+        let progress_task = tokio::spawn(async move {
+            let next = rx.recv().await.unwrap();
+            assert!(matches!(
+                next.1.phase,
+                stream_download::StreamPhase::Prefetching { .. }
+            ));
+            loop {
+                let next = rx.recv().await.unwrap();
+                if !matches!(
+                    next.1.phase,
+                    stream_download::StreamPhase::Prefetching { .. },
+                ) {
+                    assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
+                    return next.0.unwrap();
+                }
+            }
+        });
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            TempStorageProvider::default(),
+            Settings::default()
+                .prefetch_bytes(prefetch_bytes)
+                .on_progress(move |stream: &HttpStream<_>, info| {
+                    let _ = tx.try_send((stream.content_length(), info));
+                }),
+        )
+        .await
+        .unwrap();
+
+        let read_bytes = spawn_blocking(move || {
+            let mut read_bytes = 0;
+            let mut buf = [0; 4096];
+            loop {
+                let next = reader.read(&mut buf).unwrap();
+                if next == 0 {
+                    return read_bytes;
+                }
+                read_bytes += next;
+            }
+        });
+        let read_bytes = read_bytes.await.unwrap();
+        let last_content_length = progress_task.await.unwrap();
+        assert_eq!(read_bytes as u64, last_content_length);
     });
 }

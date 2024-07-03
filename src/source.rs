@@ -5,6 +5,7 @@ use std::io::{self, SeekFrom};
 use std::ops::Range;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use bytes::Bytes;
 use futures::{Future, Stream, StreamExt};
@@ -17,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
 use crate::storage::StorageWriter;
-use crate::Settings;
+use crate::{CallbackFn, Settings, StreamPhase, StreamState};
 
 /// Represents a remote resource that can be streamed over the network. Streaming
 /// over http is implemented via the [`HttpStream`](crate::http::HttpStream)
@@ -138,14 +139,11 @@ impl PositionReached {
             return;
         }
 
-        #[cfg(debug_assertions)]
         let wait_start = std::time::Instant::now();
 
         cvar.wait_while(&mut waiter, |waiter| {
             !waiter.stream_done && !waiter.position_reached
         });
-
-        #[cfg(debug_assertions)]
         debug!(
             elapsed = format!("{:?}", wait_start.elapsed()),
             "position reached"
@@ -187,7 +185,7 @@ enum DownloadStatus {
     Complete,
 }
 
-pub(crate) struct Source<W: StorageWriter> {
+pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     writer: W,
     downloaded: Downloaded,
     requested_position: RequestedPosition,
@@ -195,12 +193,13 @@ pub(crate) struct Source<W: StorageWriter> {
     content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
-    settings: Settings,
+    prefetch_bytes: u64,
+    on_progress: Option<CallbackFn<S>>,
     prefetch_complete: bool,
 }
 
-impl<H: StorageWriter> Source<H> {
-    pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings) -> Self {
+impl<S: SourceStream, H: StorageWriter> Source<S, H> {
+    pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings<S>) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(settings.seek_buffer_size);
         Self {
             writer,
@@ -211,19 +210,18 @@ impl<H: StorageWriter> Source<H> {
             seek_rx,
             content_length,
             prefetch_complete: settings.prefetch_bytes == 0,
-            settings,
+            prefetch_bytes: settings.prefetch_bytes,
+            on_progress: settings.on_progress,
         }
     }
 
     #[instrument(skip_all)]
-    pub(crate) async fn download<S: SourceStream>(
+    pub(crate) async fn download(
         mut self,
         mut stream: S,
         cancellation_token: CancellationToken,
     ) -> io::Result<()> {
         debug!("starting file download");
-
-        #[cfg(debug_assertions)]
         let download_start = std::time::Instant::now();
 
         loop {
@@ -235,7 +233,7 @@ impl<H: StorageWriter> Source<H> {
 
                         if !self.prefetch_complete {
                             debug!("seeking during prefetch, ending prefetch early");
-                            self.downloaded.add(0.. self.writer.stream_position()?);
+                            self.downloaded.add(0..self.writer.stream_position()?);
                             self.prefetch_complete = true;
                         }
                         self.seek(&mut stream, position, None).await?;
@@ -243,8 +241,8 @@ impl<H: StorageWriter> Source<H> {
                     continue
                 },
                 bytes = stream.next() => {
-                    if self.handle_bytes(&mut stream, bytes).await? == DownloadStatus::Complete {
-                        #[cfg(debug_assertions)]
+                    if self.handle_bytes(&mut stream, bytes, download_start).await?
+                    == DownloadStatus::Complete {
                         debug!(
                             download_duration = format!("{:?}", download_start.elapsed()),
                             "stream finished downloading"
@@ -256,17 +254,19 @@ impl<H: StorageWriter> Source<H> {
                     debug!("received cancellation request, stopping download task");
                     self.writer.flush()?;
                     self.signal_download_complete();
-                    return Ok(())
+                    break;
                 }
             };
         }
+        self.report_download_complete(&stream, download_start)?;
         Ok(())
     }
 
-    async fn handle_prefetch<S: SourceStream>(
+    async fn handle_prefetch(
         &mut self,
         stream: &mut S,
         bytes: Option<Bytes>,
+        download_start: Instant,
     ) -> io::Result<DownloadStatus> {
         let Some(bytes) = bytes else {
             self.prefetch_complete = true;
@@ -277,34 +277,21 @@ impl<H: StorageWriter> Source<H> {
 
             return self.finish_or_find_next_gap(stream).await;
         };
-
         self.writer.write_all(&bytes)?;
         self.writer.flush()?;
         let stream_position = self.writer.stream_position()?;
 
-        #[cfg(debug_assertions)]
-        trace!(
-            stream_position = stream_position,
-            prefetch_target = self.settings.prefetch_bytes,
-            progress = format!(
-                "{:.2}%",
-                (stream_position as f32 / self.settings.prefetch_bytes as f32) * 100.0
-            ),
-            "prefetch"
-        );
-
-        if stream_position >= self.settings.prefetch_bytes {
+        if stream_position >= self.prefetch_bytes {
             self.downloaded.add(0..stream_position);
+            debug!("prefetch complete");
             self.prefetch_complete = true;
         }
 
+        self.report_prefetch_progress(stream, stream_position, download_start, bytes.len());
         Ok(DownloadStatus::Continue)
     }
 
-    async fn finish_or_find_next_gap<S: SourceStream>(
-        &mut self,
-        stream: &mut S,
-    ) -> io::Result<DownloadStatus> {
+    async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadStatus> {
         if let Some(content_length) = self.content_length {
             let gap = self.get_download_gap(content_length);
             if let Some(gap) = gap {
@@ -321,10 +308,11 @@ impl<H: StorageWriter> Source<H> {
         Ok(DownloadStatus::Complete)
     }
 
-    async fn handle_bytes<S: SourceStream>(
+    async fn handle_bytes(
         &mut self,
         stream: &mut S,
         bytes: Option<Result<Bytes, S::StreamError>>,
+        download_start: Instant,
     ) -> io::Result<DownloadStatus> {
         let bytes = match bytes.transpose() {
             Ok(bytes) => bytes,
@@ -335,7 +323,7 @@ impl<H: StorageWriter> Source<H> {
         };
 
         if !self.prefetch_complete {
-            return self.handle_prefetch(stream, bytes).await;
+            return self.handle_prefetch(stream, bytes, download_start).await;
         }
 
         let Some(bytes) = bytes else {
@@ -351,7 +339,7 @@ impl<H: StorageWriter> Source<H> {
             previous_position = position,
             new_position,
             chunk_size = bytes.len(),
-            "received response chunk",
+            "received response chunk"
         );
 
         self.downloaded.add(position..new_position);
@@ -367,6 +355,7 @@ impl<H: StorageWriter> Source<H> {
                 self.position_reached.notify_position_reached();
             }
         }
+        self.report_downloading_progress(stream, new_position, download_start, bytes.len())?;
         Ok(DownloadStatus::Continue)
     }
 
@@ -378,12 +367,7 @@ impl<H: StorageWriter> Source<H> {
         })
     }
 
-    async fn seek<S: SourceStream>(
-        &mut self,
-        stream: &mut S,
-        start: u64,
-        end: Option<u64>,
-    ) -> io::Result<()> {
+    async fn seek(&mut self, stream: &mut S, start: u64, end: Option<u64>) -> io::Result<()> {
         stream.seek_range(start, end).await?;
         self.writer.seek(SeekFrom::Start(start))?;
         Ok(())
@@ -396,6 +380,70 @@ impl<H: StorageWriter> Source<H> {
 
     fn signal_download_complete(&self) {
         self.position_reached.notify_stream_done();
+    }
+
+    fn report_progress(&mut self, stream: &S, info: StreamState) {
+        if let Some(on_progress) = self.on_progress.as_mut() {
+            on_progress(stream, info);
+        }
+    }
+
+    fn report_prefetch_progress(
+        &mut self,
+        stream: &S,
+        stream_position: u64,
+        download_start: Instant,
+        chunk_size: usize,
+    ) {
+        self.report_progress(
+            stream,
+            StreamState {
+                current_position: stream_position,
+                current_chunk: (0..stream_position),
+                elapsed: download_start.elapsed(),
+                phase: StreamPhase::Prefetching {
+                    target: self.prefetch_bytes,
+                    chunk_size,
+                },
+            },
+        );
+    }
+
+    fn report_downloading_progress(
+        &mut self,
+        stream: &S,
+        new_position: u64,
+        download_start: Instant,
+        chunk_size: usize,
+    ) -> io::Result<()> {
+        let pos = self.writer.stream_position()?;
+        self.report_progress(
+            stream,
+            StreamState {
+                current_position: pos,
+                current_chunk: self
+                    .downloaded
+                    .get(new_position - 1)
+                    .expect("position already downloaded"),
+                elapsed: download_start.elapsed(),
+                phase: StreamPhase::Downloading { chunk_size },
+            },
+        );
+        Ok(())
+    }
+
+    fn report_download_complete(&mut self, stream: &S, download_start: Instant) -> io::Result<()> {
+        let pos = self.writer.stream_position()?;
+        self.report_progress(
+            stream,
+            StreamState {
+                current_position: pos,
+                elapsed: download_start.elapsed(),
+                current_chunk: self.downloaded.get(pos - 1).expect(""),
+                phase: StreamPhase::Complete,
+            },
+        );
+        Ok(())
     }
 
     pub(crate) fn source_handle(&self) -> SourceHandle {

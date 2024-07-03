@@ -12,9 +12,13 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
+use std::fmt::Debug;
 use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom};
+use std::ops::Range;
+use std::time::Duration;
 
+use educe::Educe;
 use source::{Source, SourceHandle, SourceStream};
 use storage::StorageProvider;
 use tap::{Tap, TapFallible};
@@ -26,30 +30,72 @@ pub mod http;
 pub mod source;
 pub mod storage;
 
-/// Settings to configure the stream behavior.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Settings {
-    prefetch_bytes: u64,
-    seek_buffer_size: usize,
+/// Current phase of the download for use during a progress callback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StreamPhase {
+    /// Stream is currently in a prefetch state.
+    #[non_exhaustive]
+    Prefetching {
+        /// Current prefetch target.
+        target: u64,
+        /// Size of the most recently downloaded chunk.
+        chunk_size: usize,
+    },
+    /// Stream is currently in a downloading state.
+    #[non_exhaustive]
+    Downloading {
+        /// Size of the most recently downloaded chunk.
+        chunk_size: usize,
+    },
+    /// Stream has finished downloading.
+    Complete,
 }
 
-impl Default for Settings {
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+/// State of the stream for use during a progress callback.
+pub struct StreamState {
+    /// Current position of the stream.
+    pub current_position: u64,
+    /// Time elapsed since download start.
+    pub elapsed: Duration,
+    /// Current phase of the download.
+    pub phase: StreamPhase,
+    /// Current chunk of the stream being downloaded.
+    pub current_chunk: Range<u64>,
+}
+
+type CallbackFn<S> = Box<dyn FnMut(&S, StreamState) + Send + Sync>;
+
+/// Settings to configure the stream behavior.
+#[derive(Educe)]
+#[educe(Debug, PartialEq, Eq)]
+pub struct Settings<S> {
+    prefetch_bytes: u64,
+    seek_buffer_size: usize,
+    #[educe(Debug = false, PartialEq = false)]
+    on_progress: Option<CallbackFn<S>>,
+}
+
+impl<S> Default for Settings<S> {
     fn default() -> Self {
         Self {
             prefetch_bytes: 256 * 1024,
             seek_buffer_size: 128,
+            on_progress: None,
         }
     }
 }
 
-impl Settings {
+impl<S> Settings<S> {
     /// How many bytes to download from the stream before allowing read requests.
     /// This is used to create a buffer between the read position and the stream position
     /// and prevent stuttering.
     ///
     /// The default value is 256 kilobytes.
     #[must_use]
-    pub const fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
+    pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
         Self {
             prefetch_bytes,
             ..self
@@ -62,11 +108,36 @@ impl Settings {
     ///
     /// The default value is 128.
     #[must_use]
-    pub const fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
+    pub fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
         Self {
             seek_buffer_size,
             ..self
         }
+    }
+
+    /// Attach a callback function that will be called when a new chunk of the stream is processed.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use reqwest::Client;
+    /// use stream_download::http::HttpStream;
+    /// use stream_download::source::SourceStream;
+    /// use stream_download::Settings;
+    ///
+    /// let settings = Settings::default();
+    /// settings.on_progress(|stream: &HttpStream<Client>, state| {
+    ///     let progress = state.current_position as f32 / stream.content_length().unwrap() as f32;
+    ///     println!("progress: {}%", progress * 100.0);
+    /// });
+    /// ```
+    #[must_use]
+    pub fn on_progress<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&S, StreamState) + Send + Sync + 'static,
+    {
+        self.on_progress = Some(Box::new(f));
+        self
     }
 
     /// Retrieves the configured prefetch bytes
@@ -130,9 +201,9 @@ impl<P: StorageProvider> StreamDownload<P> {
     pub async fn new_http(
         url: ::reqwest::Url,
         storage_provider: P,
-        settings: Settings,
+        settings: Settings<http::HttpStream<::reqwest::Client>>,
     ) -> io::Result<Self> {
-        Self::new::<http::HttpStream<::reqwest::Client>>(url, storage_provider, settings).await
+        Self::new(url, storage_provider, settings).await
     }
 
     /// Creates a new [`StreamDownload`] that accesses a remote resource at the given URL.
@@ -166,7 +237,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     pub async fn new<S: SourceStream>(
         url: S::Url,
         storage_provider: P,
-        settings: Settings,
+        settings: Settings<S>,
     ) -> io::Result<Self> {
         Self::from_make_stream(move || S::create(url), storage_provider, settings).await
     }
@@ -205,7 +276,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     pub async fn from_stream<S: SourceStream>(
         stream: S,
         storage_provider: P,
-        settings: Settings,
+        settings: Settings<S>,
     ) -> Result<Self, io::Error> {
         Self::from_make_stream(
             move || future::ready(Ok(stream)),
@@ -224,7 +295,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     async fn from_make_stream<S, F, Fut>(
         make_stream: F,
         storage_provider: P,
-        settings: Settings,
+        settings: Settings<S>,
     ) -> Result<Self, io::Error>
     where
         S: SourceStream,
