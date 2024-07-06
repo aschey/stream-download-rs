@@ -139,7 +139,7 @@ impl PositionReached {
             return;
         }
 
-        let wait_start = std::time::Instant::now();
+        let wait_start = Instant::now();
 
         cvar.wait_while(&mut waiter, |waiter| {
             !waiter.stream_done && !waiter.position_reached
@@ -196,6 +196,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     prefetch_bytes: u64,
     on_progress: Option<CallbackFn<S>>,
     prefetch_complete: bool,
+    prefetch_start_position: u64,
 }
 
 impl<S: SourceStream, H: StorageWriter> Source<S, H> {
@@ -212,6 +213,7 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
             prefetch_complete: settings.prefetch_bytes == 0,
             prefetch_bytes: settings.prefetch_bytes,
             on_progress: settings.on_progress,
+            prefetch_start_position: 0,
         }
     }
 
@@ -231,9 +233,15 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
                     if self.should_seek(position)? {
                         debug!("seek position not yet downloaded");
 
-                        if !self.prefetch_complete {
+                        if self.prefetch_complete {
+                            debug!("re-starting prefetch");
+                            self.prefetch_start_position = position;
+                            self.prefetch_complete = false;
+                        }
+                        else {
                             debug!("seeking during prefetch, ending prefetch early");
-                            self.downloaded.add(0..self.writer.stream_position()?);
+                            self.downloaded
+                                .add(self.prefetch_start_position..self.writer.stream_position()?);
                             self.prefetch_complete = true;
                         }
                         self.seek(&mut stream, position, None).await?;
@@ -266,6 +274,7 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
         &mut self,
         stream: &mut S,
         bytes: Option<Bytes>,
+        start_position: u64,
         download_start: Instant,
     ) -> io::Result<DownloadStatus> {
         let Some(bytes) = bytes else {
@@ -273,7 +282,7 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
             debug!("file shorter than prefetch length, download finished");
             self.writer.flush()?;
             let position = self.writer.stream_position()?;
-            self.downloaded.add(0..position);
+            self.downloaded.add(start_position..position);
 
             return self.finish_or_find_next_gap(stream).await;
         };
@@ -281,8 +290,8 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
         self.writer.flush()?;
         let stream_position = self.writer.stream_position()?;
 
-        if stream_position >= self.prefetch_bytes {
-            self.downloaded.add(0..stream_position);
+        if stream_position >= start_position + self.prefetch_bytes {
+            self.downloaded.add(start_position..stream_position);
             debug!("prefetch complete");
             self.prefetch_complete = true;
         }
@@ -323,7 +332,9 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
         };
 
         if !self.prefetch_complete {
-            return self.handle_prefetch(stream, bytes, download_start).await;
+            return self
+                .handle_prefetch(stream, bytes, self.prefetch_start_position, download_start)
+                .await;
         }
 
         let Some(bytes) = bytes else {
