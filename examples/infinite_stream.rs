@@ -11,6 +11,9 @@ use tracing::info;
 use tracing::metadata::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
+// Use the icy-metadata crate for handling Icecast metadata.
+// See examples here: https://github.com/aschey/icy-metadata/tree/main/examples
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()

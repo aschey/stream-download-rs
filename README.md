@@ -97,6 +97,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
+### Icecast/Shoutcast Streams
+
+If you're using this library to handle Icecast streams or one if its derivatives, check out the [icy-metadata](https://crates.io/crates/icy-metadata) crate.
+There are examples for how to use it with stream-download [in the repo](https://github.com/aschey/icy-metadata/tree/main/examples).
+
 ## Storage
 
 The [storage](https://docs.rs/stream-download/latest/stream_download/storage/index.html) module provides ways to customize how the stream is cached locally.
