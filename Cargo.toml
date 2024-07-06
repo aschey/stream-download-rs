@@ -87,7 +87,6 @@ required-features = ["reqwest"]
 doc-scrape-examples = true
 
 [package.metadata.docs.rs]
-# don't enable tls features here because it causes build failures
-features = ["reqwest", "temp-storage"]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
