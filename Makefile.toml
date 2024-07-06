@@ -9,9 +9,9 @@ script_runner = "@shell"
 install_crate = "cargo-nextest"
 
 [tasks.coverage]
-env = { RUST_LOG = "trace" }
+env = { RUST_LOG = "trace", NEXTEST_TEST_THREADS = 200 }
 script = '''
-cargo llvm-cov nextest --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
+cargo llvm-cov nextest --features=reqwest,temp-storage --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
 genhtml -o ./target/debug/coverage/ --show-details --highlight --ignore-errors source --legend ./target/debug/lcov.info
 '''
 clear = true
