@@ -125,9 +125,8 @@ jobs:
       - name: rustfmt
         run: cargo +nightly fmt --all --check
       - name: Verify docs
-        run: cargo +nightly doc -Zunstable-options -Zrustdoc-scrape-examples --no-deps --features=reqwest,temp-storage
+        run: cargo +nightly doc -Zunstable-options -Zrustdoc-scrape-examples --no-deps --all-features
         env:
-          RUSTFLAGS: --cfg docsrs
           RUSTDOCFLAGS: --cfg docsrs -D warnings
 
       - name: Lint dependencies
