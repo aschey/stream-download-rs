@@ -1,25 +1,9 @@
-//! Storage wrappers for restricting the size of the underlying storage layer.
-//! This is useful for dealing with infinite streams when you don't want the storage size to keep
-//! growing indefinitely. It can also be used for downloading large files where you want to prevent
-//! allocating too much space at one time.
-//!
-//! The underlying data is used as a circular buffer - once it reaches capacity, it will begin to
-//! overwrite old data.
-//!
-//! Because the buffer will never resize, it's important to ensure the buffer is large enough to
-//! hold all of the data you will need at once. This needs to account for any seeking that may occur
-//! as well as the size of the initial prefetch phase.
-//!
-//! If your inputs may or may not have a known content length, consider using an
-//! [`AdaptiveStorageProvider`](super::adaptive::AdaptiveStorageProvider) to automatically
-//! determine whether or not the overhead of maintaining a bounded buffer is necessary.
 use std::fmt::Debug;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 
 use educe::Educe;
-use parking_lot::Mutex;
 use tracing::{debug, instrument, trace, warn};
 
 use super::{StorageProvider, StorageReader, StorageWriter};
@@ -79,13 +63,14 @@ where
                 "Requested buffer size of {buffer_size} exceeds the maximum value"
             ))?;
 
-        let shared_info = Arc::new(Mutex::new(SharedInfo {
+        let shared_info = Arc::new((Mutex::new(SharedInfo {
             read: 0,
             written: 0,
             read_position: 0,
             write_position: 0,
             size: buffer_size,
-        }));
+        }), Condvar::new()));
+
         let reader = BoundedStorageReader {
             inner: reader,
             shared_info: shared_info.clone(),
@@ -126,7 +111,7 @@ where
 {
     #[educe(Debug = false)]
     inner: T,
-    shared_info: Arc<Mutex<SharedInfo>>,
+    shared_info: Arc<(Mutex<SharedInfo>, Condvar)>,
 }
 
 impl<T> Read for BoundedStorageReader<T>
@@ -138,7 +123,8 @@ where
         if buf.is_empty() {
             return Ok(0);
         }
-        let mut shared_info = self.shared_info.lock();
+        let (shared_info, cvar) = &*self.shared_info;
+        let mut shared_info = shared_info.lock().unwrap();
 
         if buf.len() > shared_info.size {
             return Err(io::Error::new(
@@ -208,6 +194,8 @@ where
         shared_info.read_position += read_len;
         shared_info.read += read_len;
 
+        cvar.notify_all(); // Notify all waiting writers
+
         Ok(read_len)
     }
 }
@@ -218,7 +206,8 @@ where
 {
     #[instrument]
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
-        let mut shared_info = self.shared_info.lock();
+        let (shared_info, _) = &*self.shared_info;
+        let mut shared_info = shared_info.lock().unwrap();
         let new_position = match position {
             SeekFrom::Start(position) => position as usize,
             SeekFrom::Current(from_current) => {
@@ -246,7 +235,7 @@ where
 {
     #[educe(Debug = false)]
     inner: T,
-    shared_info: Arc<Mutex<SharedInfo>>,
+    shared_info: Arc<(Mutex<SharedInfo>, Condvar)>,
 }
 
 impl<T> Write for BoundedStorageWriter<T>
@@ -255,7 +244,15 @@ where
 {
     #[instrument(skip(buf))]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut shared_info = self.shared_info.lock();
+        let (shared_info, cvar) = &*self.shared_info;
+        let mut shared_info = shared_info.lock().unwrap();
+
+        let write_len = buf.len();
+
+        // Wait until there is enough space in the buffer
+        while shared_info.write_position + write_len - shared_info.read_position > shared_info.size {
+            shared_info = cvar.wait(shared_info).unwrap();
+        }
 
         let start = shared_info.mapped_write_position(0);
         let end = shared_info.mapped_write_position(buf.len() - 1) + 1;
@@ -299,7 +296,8 @@ where
 {
     #[instrument]
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
-        let mut shared_info = self.shared_info.lock();
+        let (shared_info, _) = &*self.shared_info;
+        let mut shared_info = shared_info.lock().unwrap();
         let new_position = match position {
             SeekFrom::Start(position) => position as usize,
             SeekFrom::Current(from_current) => {
