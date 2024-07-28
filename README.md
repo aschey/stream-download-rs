@@ -9,11 +9,12 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/aschey/stream-download-rs)
 ![Lines of Code](https://aschey.tech/tokei/github/aschey/stream-download-rs)
 
-[stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location to a local cache and using it as a [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
-The requested content is downloaded in the background and read or seek operations are allowed before the download is finished. Seek operations may cause the stream to be restarted from the requested position if the download is still in progress.
+[stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location to a local cache and using it as a [`read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [`seek`](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
+The requested content is downloaded in the background and read or seek operations are allowed before the download is finished.
+Seek operations may cause the stream to be restarted from the requested position if the download is still in progress.
 This is useful for media applications that need to stream large files that may take a long time to download.
 
-HTTP is the only transport supplied by this library, but you can use a custom transport by implementing the `SourceStream` trait.
+This library makes heavy use of the adapter pattern to allow for pluggable transports and storage implementations.
 
 ## Installation
 
@@ -23,10 +24,11 @@ cargo add stream-download
 
 ## Features
 
-- `http` - adds an HTTP-based implementation of the [SourceStream](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait (enabled by default).
-- `reqwest` - enables streaming content over http using [reqwest](https://github.com/seanmonstar/reqwest) (enabled by default).
+- `http` - adds an HTTP-based implementation of the [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait (enabled by default).
+- `reqwest` - enables streaming content over http using [reqwest](https://crates.io/crates/reqwest) (enabled by default).
 - `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables the `reqwest` feature.
 - `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the `reqwest` feature.
+- `open-dal` - adds a `SourceStream` implementation that uses [Apache OpenDAL](https://crates.io/crates/opendal) as the backend.
 - `temp-storage` - adds a temporary file-based storage backend (enabled by default).
 
 One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use https streams.
@@ -60,6 +62,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 ## Examples
 
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
+
+## Transports
+
+Transports implement the [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait. Two types of transports are provided out of the box - [`http`](https://docs.rs/stream-download/latest/stream_download/http) for typical HTTP-based sources and [`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal) which is more complex, but supports a large variety of services.
+
+Only `http` is enabled by default.
+You can provide a custom transport by implementing `SourceStream` yourself.
 
 ## Streams with Unknown Length
 

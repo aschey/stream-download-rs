@@ -29,14 +29,14 @@ use crate::{CallbackFn, Settings, StreamPhase, StreamState};
 pub trait SourceStream:
     Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync + Sized + 'static
 {
-    /// URL of the remote resource.
-    type Url: Send;
+    /// Parameters used to create the remote resource.
+    type Params: Send;
 
     /// Error type thrown by the underlying stream.
     type StreamError: Error + Send;
 
     /// Creates an instance of the stream.
-    fn create(url: Self::Url) -> impl Future<Output = io::Result<Self>> + Send;
+    fn create(params: Self::Params) -> impl Future<Output = io::Result<Self>> + Send;
 
     /// Returns the size of the remote resource in bytes. The result should be `None`
     /// if the stream is infinite or doesn't have a known length.

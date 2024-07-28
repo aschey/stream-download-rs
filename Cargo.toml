@@ -13,18 +13,20 @@ keywords = ["audio", "stream", "media"]
 include = ["/src", "/examples", "/tests"]
 
 [dependencies]
-bytes = "1"
+bytes = "1.6"
 educe = "0.6"
 futures = "0.3"
 mediatype = { version = "0.19", optional = true }
+opendal = { version = "0.47", optional = true }
 parking_lot = "0.12.1"
+pin-project-lite = { version = "0.2.9", optional = true }
 rangemap = "1"
-reqwest = { version = "0.12", features = [
+reqwest = { version = "0.12.2", features = [
   "stream",
 ], default-features = false, optional = true }
 tap = "1.0.1"
 tempfile = { version = "3.1", optional = true }
-tokio = { version = "1.23.1", features = ["sync", "macros", "rt"] }
+tokio = { version = "1.27", features = ["sync", "macros", "rt"] }
 tokio-util = "0.7.1"
 tracing = "0.1.36"
 
@@ -35,6 +37,7 @@ reqwest = ["http", "dep:reqwest"]
 reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
 reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
 temp-storage = ["dep:tempfile"]
+open-dal = ["dep:opendal", "dep:pin-project-lite", "tokio-util/compat"]
 
 [dev-dependencies]
 rodio = { version = "0.19.0", default-features = false, features = [
@@ -48,6 +51,9 @@ ctor = "0.2.7"
 rstest = "0.21.0"
 proptest = "1.4.0"
 axum = "0.7.5"
+opendal = { version = "0.47.3", features = ["services-s3", "services-http"] }
+testcontainers-modules = { version = "0.8.0", features = ["localstack"] }
+aws-sdk-s3 = "1.29.0"
 
 [[example]]
 name = "basic_http"
@@ -82,6 +88,11 @@ doc-scrape-examples = true
 [[example]]
 name = "memory_storage"
 required-features = ["reqwest"]
+doc-scrape-examples = true
+
+[[example]]
+name = "s3"
+required-features = ["open-dal"]
 doc-scrape-examples = true
 
 [package.metadata.docs.rs]

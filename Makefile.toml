@@ -9,7 +9,7 @@ script_runner = "@shell"
 install_crate = "cargo-nextest"
 
 [tasks.coverage]
-env = { RUST_LOG = "trace", NEXTEST_TEST_THREADS = 200 }
+env = { RUST_LOG = "trace", NEXTEST_TEST_THREADS = 100 }
 script = '''
 cargo llvm-cov nextest --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
 genhtml -o ./target/debug/coverage/ --show-details --highlight --ignore-errors source --legend ./target/debug/lcov.info
@@ -33,7 +33,7 @@ script_runner = "@shell"
 
 [tasks.test]
 command = "cargo"
-args = ["nextest", "run"]
+args = ["nextest", "run", "--all-features"]
 clear = true
 env = { NEXTEST_TEST_THREADS = 200 }
 install_crate = "cargo-nextest"
