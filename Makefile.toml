@@ -72,3 +72,8 @@ install_crate = "watchexec-cli"
 [tasks.build-all]
 command = "cargo"
 args = ["build", "--all-features", "--examples"]
+
+[tasks.min-versions]
+command = "cargo"
+install_crate = "cargo-minimal-versions"
+args = ["minimal-versions", "check", "--all-features", "--direct"]

@@ -15,8 +15,6 @@ include = ["/src", "/examples", "/tests"]
 [dependencies]
 bytes = "1"
 educe = "0.6"
-# this is a transitive dependency but 4.2 fails to compile so we need to pin this for now
-enum-ordinalize = { version = "4.3.0", default-features = false }
 futures = "0.3"
 mediatype = { version = "0.19", optional = true }
 parking_lot = "0.12.1"
@@ -25,7 +23,7 @@ reqwest = { version = "0.12", features = [
   "stream",
 ], default-features = false, optional = true }
 tap = "1.0.1"
-tempfile = { version = "3", optional = true }
+tempfile = { version = "3.1", optional = true }
 tokio = { version = "1.23.1", features = ["sync", "macros", "rt"] }
 tokio-util = "0.7.1"
 tracing = "0.1.36"
