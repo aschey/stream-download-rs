@@ -9,9 +9,11 @@ mod setup;
 
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
+use opendal::{services, Operator};
 use rstest::rstest;
 use setup::{SERVER_ADDR, SERVER_RT};
 use stream_download::http::HttpStream;
+use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
 use stream_download::source::SourceStream;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
@@ -240,7 +242,37 @@ fn new(#[case] prefetch_bytes: u64) {
 #[case(1)]
 #[case(256*1024)]
 #[case(1024*1024)]
-fn from_stream(#[case] prefetch_bytes: u64) {
+fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] chunk_size: usize) {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let mut builder = services::Http::default();
+        builder.endpoint(&format!("http://{}", SERVER_ADDR.get().unwrap()));
+        let operator = Operator::new(builder).unwrap().finish();
+        let mut reader = StreamDownload::new_open_dal(
+            OpenDalStreamParams::new(operator, "music.mp3")
+                .chunk_size(NonZeroUsize::new(chunk_size).unwrap()),
+            TempStorageProvider::default(),
+            Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+
+            compare(get_file_buf(), buf);
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+fn from_stream_http(#[case] prefetch_bytes: u64) {
     SERVER_RT.get().unwrap().block_on(async move {
         let stream = http::HttpStream::new(
             reqwest::Client::new(),
@@ -263,6 +295,43 @@ fn from_stream(#[case] prefetch_bytes: u64) {
 
         assert_eq!("audio/mpeg", stream.header("Content-Type").unwrap());
         assert_eq!("audio/mpeg", stream.headers().get("Content-Type").unwrap());
+
+        let mut reader = StreamDownload::from_stream(
+            stream,
+            TempStorageProvider::default(),
+            Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+
+            compare(file_buf, buf);
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let mut builder = services::Http::default();
+        builder.endpoint(&format!("http://{}", SERVER_ADDR.get().unwrap()));
+        let operator = Operator::new(builder).unwrap().finish();
+        let stream = OpenDalStream::new(OpenDalStreamParams::new(operator, "music.mp3"))
+            .await
+            .unwrap();
+
+        let file_buf = get_file_buf();
+        assert_eq!(file_buf.len() as u64, stream.content_length().unwrap());
+        assert_eq!("audio/mpeg", stream.content_type().unwrap());
 
         let mut reader = StreamDownload::from_stream(
             stream,
@@ -643,11 +712,52 @@ fn seek_basic(
             reader.read_to_end(&mut buf).unwrap();
 
             let file_buf = get_file_buf();
-            compare(&file_buf[0..4096], initial_buf);
+            compare(&file_buf[..4096], initial_buf);
             compare(file_buf, buf);
         });
 
         handle.await.unwrap();
+    });
+}
+
+#[rstest]
+fn seek_basic_open_dal(
+    #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
+) {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let mut builder = services::Http::default();
+        builder.endpoint(&format!("http://{}", SERVER_ADDR.get().unwrap()));
+
+        let operator = Operator::new(builder).unwrap().finish();
+
+        let mut reader = StreamDownload::new::<OpenDalStream>(
+            OpenDalStreamParams::new(operator, "music.mp3"),
+            storage,
+            Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut first_read = [0; 4096];
+            reader.read_exact(&mut first_read).unwrap();
+            let mut second_read = [0; 16];
+            reader.seek(SeekFrom::End(-16)).unwrap();
+            reader.read_exact(&mut second_read).unwrap();
+            reader.seek(SeekFrom::Start(0)).unwrap();
+
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+
+            let file_buf = get_file_buf();
+            compare(&file_buf[..4096], first_read);
+            compare(&file_buf[file_buf.len() - 16..], second_read);
+            compare(file_buf, buf);
+        });
+
+        // handle.await.unwrap();
     });
 }
 

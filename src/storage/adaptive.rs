@@ -58,7 +58,7 @@ where
             let writer = AdaptiveStorageWriter::Unbounded(writer);
             Ok((reader, writer))
         } else {
-            let provider = BoundedStorageProvider::new(self.inner.clone(), self.size);
+            let provider = BoundedStorageProvider::new(self.inner, self.size);
             let (reader, writer) = provider.into_reader_writer(content_length)?;
             let reader = AdaptiveStorageReader::Bounded(reader);
             let writer = AdaptiveStorageWriter::Bounded(writer);

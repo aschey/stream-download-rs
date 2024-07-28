@@ -1,7 +1,7 @@
 //! An HTTP implementation of the [`SourceStream`] trait.
 //!
 //! An implementation of the [Client] trait using [reqwest](https://docs.rs/reqwest/latest/reqwest)
-//! is provided if the `request` feature is enabled. If you need to customize the client object, you
+//! is provided if the `reqwest` feature is enabled. If you need to customize the client object, you
 //! can use [`HttpStream::new`](crate::http::HttpStream::new) to supply your own reqwest client.
 //! Keep in mind that reqwest recommends creating a single client and cloning it for each new
 //! connection.
@@ -158,7 +158,7 @@ pub struct HttpStream<C: Client> {
 impl<C: Client> HttpStream<C> {
     /// Creates a new [HttpStream] from a [Client].
     #[instrument(skip(client, url), fields(url = url.to_string()))]
-    pub async fn new(client: C, url: <Self as SourceStream>::Url) -> io::Result<Self> {
+    pub async fn new(client: C, url: <Self as SourceStream>::Params) -> io::Result<Self> {
         debug!("requesting stream content");
         let request_start = Instant::now();
 
@@ -243,11 +243,11 @@ impl<C: Client> Stream for HttpStream<C> {
 }
 
 impl<C: Client> SourceStream for HttpStream<C> {
-    type Url = C::Url;
+    type Params = C::Url;
     type StreamError = C::Error;
 
-    async fn create(url: Self::Url) -> io::Result<Self> {
-        Self::new(C::create(), url).await
+    async fn create(params: Self::Params) -> io::Result<Self> {
+        Self::new(C::create(), params).await
     }
 
     fn content_length(&self) -> Option<u64> {

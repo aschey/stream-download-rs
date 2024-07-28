@@ -9,6 +9,7 @@
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::missing_fields_in_debug)]
 #![warn(clippy::use_self)]
+#![warn(missing_debug_implementations)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
@@ -27,6 +28,8 @@ use tracing::{debug, error, instrument, trace};
 
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "open-dal")]
+pub mod open_dal;
 pub mod source;
 pub mod storage;
 
@@ -206,6 +209,52 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::new(url, storage_provider, settings).await
     }
 
+    #[cfg(feature = "open-dal")]
+    /// Creates a new [`StreamDownload`] that uses an `OpenDAL` resource.
+    /// See the [`open_dal`] documentation for more details.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    /// use std::io::Read;
+    /// use std::result::Result;
+    ///
+    /// use opendal::{services, Operator};
+    /// use stream_download::open_dal::OpenDalStreamParams;
+    /// use stream_download::storage::temp::TempStorageProvider;
+    /// use stream_download::{Settings, StreamDownload};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut builder = services::S3::default();
+    ///     builder
+    ///         .region("us-east-1")
+    ///         .access_key_id("test")
+    ///         .secret_access_key("test")
+    ///         .bucket("my-bucket");
+    ///     let operator = Operator::new(builder)?.finish();
+    ///
+    ///     let mut reader = StreamDownload::new_open_dal(
+    ///         OpenDalStreamParams::new(operator, "some-object-key"),
+    ///         TempStorageProvider::default(),
+    ///         Settings::default(),
+    ///     )
+    ///     .await?;
+    ///
+    ///     let mut buf = Vec::new();
+    ///     reader.read_to_end(&mut buf)?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn new_open_dal(
+        params: open_dal::OpenDalStreamParams,
+        storage_provider: P,
+        settings: Settings<open_dal::OpenDalStream>,
+    ) -> io::Result<Self> {
+        Self::new(params, storage_provider, settings).await
+    }
+
     /// Creates a new [`StreamDownload`] that accesses a remote resource at the given URL.
     ///
     /// # Example
@@ -235,7 +284,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     /// }
     /// ```
     pub async fn new<S: SourceStream>(
-        url: S::Url,
+        url: S::Params,
         storage_provider: P,
         settings: Settings<S>,
     ) -> io::Result<Self> {
