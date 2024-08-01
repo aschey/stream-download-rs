@@ -55,7 +55,6 @@ pub struct OpenDalStreamParams {
 
 impl OpenDalStreamParams {
     /// Creates a new [`OpenDalStreamParams`] instance.
-
     pub fn new<S>(operator: Operator, path: S) -> Self
     where
         S: Into<String>,
