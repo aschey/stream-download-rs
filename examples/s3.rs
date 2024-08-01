@@ -48,8 +48,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let endpoint_url = setup_localstack_s3(&container).await?;
 
-    let mut builder = services::S3::default();
-    builder
+    let builder = services::S3::default()
         .region(REGION)
         .endpoint(&endpoint_url)
         .access_key_id(ACCESS_KEY_ID)
