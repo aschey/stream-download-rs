@@ -170,7 +170,8 @@ impl<S> Settings<S> {
 pub struct StreamDownload<P: StorageProvider> {
     output_reader: P::Reader,
     handle: SourceHandle,
-    download_task_cancellation_token: CancellationToken,
+    /// Download task cancellation token
+    pub download_task_cancellation_token: CancellationToken,
 }
 
 impl<P: StorageProvider> StreamDownload<P> {
