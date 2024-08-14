@@ -170,8 +170,7 @@ impl<S> Settings<S> {
 pub struct StreamDownload<P: StorageProvider> {
     output_reader: P::Reader,
     handle: SourceHandle,
-    /// Download task cancellation token
-    pub download_task_cancellation_token: CancellationToken,
+    download_task_cancellation_token: CancellationToken,
 }
 
 impl<P: StorageProvider> StreamDownload<P> {
@@ -340,6 +339,11 @@ impl<P: StorageProvider> StreamDownload<P> {
     /// This has no effect if the download is already completed.
     pub fn cancel_download(&self) {
         self.download_task_cancellation_token.cancel();
+    }
+
+    /// Get a cancellation token
+    pub fn get_cancellation_token(&self) -> CancellationToken {
+        return self.download_task_cancellation_token.clone();
     }
 
     async fn from_make_stream<S, F, Fut>(
