@@ -343,7 +343,7 @@ impl<P: StorageProvider> StreamDownload<P> {
 
     /// Get the [`CancellationToken`] for the download task.
     pub fn get_cancellation_token(&self) -> CancellationToken {
-        return self.download_task_cancellation_token.clone();
+        self.download_task_cancellation_token.clone()
     }
 
     async fn from_make_stream<S, F, Fut>(
