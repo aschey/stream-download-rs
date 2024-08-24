@@ -14,8 +14,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     let mut builder = services::S3::default();
-//!     builder
+//!     let mut builder = services::S3::default()
 //!         .region("us-east-1")
 //!         .access_key_id("test")
 //!         .secret_access_key("test")
