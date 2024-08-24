@@ -38,6 +38,7 @@ One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use h
 ```rust,no_run
 use std::error::Error;
 use std::io::Read;
+use std::io;
 use std::result::Result;
 
 use stream_download::storage::temp::TempStorageProvider;
@@ -52,8 +53,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
-    let mut buf = Vec::new();
-    reader.read_to_end(&mut buf)?;
+    tokio::task::spawn_blocking(move || {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+        Ok::<_, io::Error>(())
+    }).await??;
+    
     Ok(())
 }
 
@@ -80,6 +85,7 @@ If it's necessary to explicitly check for an infinite stream, you can check the 
 ```rust,no_run
 use std::error::Error;
 use std::io::Read;
+use std::io;
 use std::result::Result;
 
 use stream_download::http::HttpStream;
@@ -100,8 +106,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         StreamDownload::from_stream(stream, TempStorageProvider::default(), Settings::default())
             .await?;
 
-    let mut buf = [0; 256];
-    reader.read_exact(&mut buf)?;
+    tokio::task::spawn_blocking(move || {
+        let mut buf = [0; 256];
+        reader.read_exact(&mut buf)?;
+        Ok::<_, io::Error>(())
+    }).await??;
+ 
     Ok(())
 }
 ```

@@ -38,6 +38,11 @@ clear = true
 env = { NEXTEST_TEST_THREADS = 200 }
 install_crate = "cargo-nextest"
 
+[tasks.test-docs]
+command = "cargo"
+args = ["test", "--doc", "--all-features"]
+
+
 [tasks.open-docs]
 env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings" }
 toolchain = "nightly"
