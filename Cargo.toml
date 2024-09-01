@@ -48,7 +48,7 @@ tokio = { version = "1.37.0", features = ["sync", "macros", "rt-multi-thread"] }
 tower-http = { version = "0.5.2", features = ["fs"] }
 tower = { version = "0.4.13", features = ["make"] }
 ctor = "0.2.7"
-rstest = "0.21.0"
+rstest = "0.22.0"
 proptest = "1.4.0"
 axum = "0.7.5"
 testcontainers-modules = { version = "0.9.0", features = ["localstack"] }
