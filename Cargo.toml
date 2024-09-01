@@ -51,7 +51,7 @@ ctor = "0.2.7"
 rstest = "0.21.0"
 proptest = "1.4.0"
 axum = "0.7.5"
-testcontainers-modules = { version = "0.9.0", features = ["localstack"] }
+testcontainers-modules = { version = "0.10.0", features = ["localstack"] }
 opendal = { version = "0.48.0", features = ["services-s3", "services-http"] }
 aws-sdk-s3 = "1.29.0"
 
