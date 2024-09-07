@@ -27,7 +27,7 @@ use tokio::task::spawn_blocking;
 #[derive(Debug)]
 struct TestClient {
     inner: reqwest::Client,
-    tx: mpsc::Sender<(Command, oneshot::Sender<Duration>)>,
+    tx: mpsc::UnboundedSender<(Command, oneshot::Sender<Duration>)>,
     has_content_length: bool,
 }
 
@@ -41,7 +41,7 @@ enum Command {
 
 struct TestResponse {
     inner: reqwest::Response,
-    tx: mpsc::Sender<(Command, oneshot::Sender<Duration>)>,
+    tx: mpsc::UnboundedSender<(Command, oneshot::Sender<Duration>)>,
     has_content_length: bool,
 }
 
@@ -52,7 +52,7 @@ enum StreamState {
 
 struct TestStream {
     inner: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + Sync>,
-    tx: mpsc::Sender<(Command, oneshot::Sender<Duration>)>,
+    tx: mpsc::UnboundedSender<(Command, oneshot::Sender<Duration>)>,
     total_size: usize,
     state: StreamState,
 }
@@ -65,7 +65,7 @@ impl Stream for TestStream {
             StreamState::Ready => {
                 let (tx, rx) = oneshot::channel();
                 self.tx
-                    .try_send((Command::NextChunk(self.total_size), tx))
+                    .send((Command::NextChunk(self.total_size), tx))
                     .unwrap();
                 let waker = cx.waker().clone();
                 self.state = StreamState::Waiting;
@@ -84,13 +84,13 @@ impl Stream for TestStream {
                 match &res {
                     Poll::Ready(None) => {
                         let (tx, _rx) = oneshot::channel();
-                        this.tx.try_send((Command::EndStream, tx)).unwrap();
+                        this.tx.send((Command::EndStream, tx)).unwrap();
                     }
                     Poll::Ready(Some(Ok(res))) => {
                         this.total_size += res.len();
                         if res.is_empty() {
                             let (tx, _rx) = oneshot::channel();
-                            this.tx.try_send((Command::EndStream, tx)).unwrap();
+                            this.tx.send((Command::EndStream, tx)).unwrap();
                         }
                     }
                     _ => {}
@@ -103,7 +103,7 @@ impl Stream for TestStream {
 
 impl TestClient {
     fn new(
-        tx: mpsc::Sender<(Command, oneshot::Sender<Duration>)>,
+        tx: mpsc::UnboundedSender<(Command, oneshot::Sender<Duration>)>,
         has_content_length: bool,
     ) -> Self {
         Self {
@@ -126,7 +126,7 @@ impl http::Client for TestClient {
 
     async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error> {
         let (tx, rx) = oneshot::channel();
-        self.tx.send((Command::GetUrl, tx)).await.unwrap();
+        self.tx.send((Command::GetUrl, tx)).unwrap();
         tokio::time::sleep(rx.await.unwrap()).await;
 
         http::Client::get(&self.inner, url)
@@ -145,7 +145,7 @@ impl http::Client for TestClient {
         end: Option<u64>,
     ) -> Result<Self::Response, Self::Error> {
         let (tx, rx) = oneshot::channel();
-        self.tx.send((Command::GetRange, tx)).await.unwrap();
+        self.tx.send((Command::GetRange, tx)).unwrap();
         tokio::time::sleep(rx.await.unwrap()).await;
 
         Ok(TestResponse {
@@ -447,7 +447,7 @@ fn slow_download(
     + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
-        let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -499,7 +499,7 @@ fn bounded(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider,
 ) {
     let buf = SERVER_RT.get().unwrap().block_on(async move {
-        let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -564,7 +564,7 @@ fn adaptive(
     + 'static,
 ) {
     let buf = SERVER_RT.get().unwrap().block_on(async move {
-        let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -622,7 +622,7 @@ fn adaptive(
 #[rstest]
 fn bounded_seek_near_beginning() {
     SERVER_RT.get().unwrap().block_on(async move {
-        let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -632,7 +632,7 @@ fn bounded_seek_near_beginning() {
             rx
         });
 
-        let bounded_size = 256 * 1024;
+        let bounded_size = 128 * 1024;
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, false),
@@ -644,21 +644,25 @@ fn bounded_seek_near_beginning() {
             .unwrap(),
             BoundedStorageProvider::new(
                 MemoryStorageProvider,
-                NonZeroUsize::new(256 * 1024).unwrap(),
+                NonZeroUsize::new(bounded_size).unwrap(),
             ),
             Settings::default().prefetch_bytes(0),
         )
         .await
         .unwrap();
         let mut rx = handle.await.unwrap();
-
         let mut prev_size = 0;
         while let Some((command, responder)) = rx.recv().await {
             if let Command::NextChunk(size) = command {
-                responder.send(Duration::from_millis(0)).ok();
                 let mut temp_buf = vec![0; size - prev_size];
+                reader.read_exact(&mut temp_buf).unwrap();
+
                 if size > bounded_size {
+                    // After reading past the buffer size, seek to the beginning.
+                    // This should produce an error since we're attempting to read past the
+                    // available buffer.
                     reader.rewind().unwrap();
+                    let mut temp_buf = vec![0; size - prev_size];
                     if let Err(e) = reader.read(&mut temp_buf) {
                         assert_eq!(io::ErrorKind::InvalidInput, e.kind());
                     } else {
@@ -666,10 +670,46 @@ fn bounded_seek_near_beginning() {
                     }
                     return;
                 }
-
                 prev_size = size;
             }
+            responder.send(Duration::from_millis(0)).unwrap();
         }
+    });
+}
+
+#[rstest]
+fn backpressure(
+    #[values(0, 1, 256*1024)] prefetch_bytes: u64,
+    #[values(4096, 4096*2+1, 256*1024)] bounded_size: usize,
+    #[values(1, 5)] multiplier: usize,
+) {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            BoundedStorageProvider::new(
+                TempStorageProvider::default(),
+                NonZeroUsize::new(bounded_size * multiplier).unwrap(),
+            ),
+            Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+        tokio::task::spawn_blocking(move || {
+            let file_buf = get_file_buf();
+            let mut buf = vec![0; file_buf.len()];
+            let mut written = 0;
+            while written < file_buf.len() {
+                let new_written = reader
+                    .read(&mut buf[written..(written + (4096 * multiplier)).min(file_buf.len())])
+                    .unwrap();
+                written += new_written;
+            }
+            compare(buf, file_buf);
+        })
+        .await
+        .unwrap();
     });
 }
 
@@ -680,7 +720,7 @@ fn seek_basic(
     + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
-        let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -785,7 +825,7 @@ fn seek_all(
     + 'static,
 ) {
     SERVER_RT.get().unwrap().block_on(async move {
-        let (tx, mut rx) = mpsc::channel::<(Command, oneshot::Sender<Duration>)>(32);
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -920,7 +960,7 @@ fn cancel_download(#[case] prefetch_bytes: u64) {
 fn on_progress(#[case] prefetch_bytes: u64) {
     use stream_download::StreamState;
 
-    let (tx, mut rx) = mpsc::channel::<(Option<u64>, StreamState)>(10000);
+    let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
     SERVER_RT.get().unwrap().block_on(async move {
         let progress_task = tokio::spawn(async move {
@@ -961,7 +1001,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
             Settings::default()
                 .prefetch_bytes(prefetch_bytes)
                 .on_progress(move |stream: &HttpStream<_>, info| {
-                    let _ = tx.try_send((stream.content_length(), info));
+                    let _ = tx.send((stream.content_length(), info));
                 }),
         )
         .await
@@ -988,7 +1028,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
 fn on_progress_no_prefetch() {
     use stream_download::StreamState;
 
-    let (tx, mut rx) = mpsc::channel::<(Option<u64>, StreamState)>(10000);
+    let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
     SERVER_RT.get().unwrap().block_on(async move {
         let progress_task = tokio::spawn(async move {
@@ -1015,7 +1055,7 @@ fn on_progress_no_prefetch() {
             TempStorageProvider::default(),
             Settings::default().prefetch_bytes(0).on_progress(
                 move |stream: &HttpStream<_>, info| {
-                    let _ = tx.try_send((stream.content_length(), info));
+                    let _ = tx.send((stream.content_length(), info));
                 },
             ),
         )
@@ -1044,7 +1084,7 @@ fn on_progress_no_prefetch() {
 fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
     use stream_download::StreamState;
 
-    let (tx, mut rx) = mpsc::channel::<(Option<u64>, StreamState)>(10000);
+    let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
     SERVER_RT.get().unwrap().block_on(async move {
         let progress_task = tokio::spawn(async move {
@@ -1072,7 +1112,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
             Settings::default()
                 .prefetch_bytes(prefetch_bytes)
                 .on_progress(move |stream: &HttpStream<_>, info| {
-                    let _ = tx.try_send((stream.content_length(), info));
+                    let _ = tx.send((stream.content_length(), info));
                 }),
         )
         .await

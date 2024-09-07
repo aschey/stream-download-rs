@@ -5,17 +5,17 @@ use std::fmt::Debug;
 use std::future;
 use std::io::{self, SeekFrom};
 use std::ops::Range;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::{Future, Stream, StreamExt, TryStream};
 use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tap::TapFallible;
-use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::{mpsc, Notify};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -77,22 +77,31 @@ pub(crate) struct SourceHandle {
     position_reached: PositionReached,
     content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
+    notify_read: NotifyRead,
 }
 
 impl SourceHandle {
-    pub fn get_downloaded_at_position(&self, position: u64) -> Option<Range<u64>> {
+    pub(crate) fn get_downloaded_at_position(&self, position: u64) -> Option<Range<u64>> {
         self.downloaded.get(position)
     }
 
-    pub fn request_position(&self, position: u64) {
+    pub(crate) fn request_position(&self, position: u64) {
         self.requested_position.set(position);
     }
 
-    pub fn wait_for_requested_position(&self) {
+    pub(crate) fn wait_for_requested_position(&self) {
         self.position_reached.wait_for_position_reached();
     }
 
-    pub fn seek(&self, position: u64) {
+    pub(crate) fn notify_read(&self) {
+        self.notify_read.notify_read();
+    }
+
+    pub(crate) fn notify_waiting(&self) {
+        self.notify_read.notify_waiting();
+    }
+
+    pub(crate) fn seek(&self, position: u64) {
         self.seek_tx
             .try_send(position)
             .tap_err(|e| {
@@ -103,7 +112,7 @@ impl SourceHandle {
             .ok();
     }
 
-    pub fn content_length(&self) -> Option<u64> {
+    pub(crate) fn content_length(&self) -> Option<u64> {
         self.content_length
     }
 }
@@ -132,6 +141,12 @@ impl RequestedPosition {
     fn set(&self, position: u64) {
         self.0.store(position as i64, Ordering::Relaxed);
     }
+}
+
+#[derive(Default, Debug)]
+struct Waiter {
+    position_reached: bool,
+    stream_done: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -191,10 +206,32 @@ impl Downloaded {
     }
 }
 
-#[derive(Default, Debug)]
-struct Waiter {
-    position_reached: bool,
-    stream_done: bool,
+#[derive(Clone, Debug, Default)]
+struct NotifyRead {
+    notify: Arc<Notify>,
+    write_requested: Arc<AtomicBool>,
+}
+
+impl NotifyRead {
+    fn request(&self) {
+        self.write_requested.store(true, Ordering::SeqCst);
+    }
+
+    fn notify_read(&self) {
+        if self.write_requested.swap(false, Ordering::SeqCst) {
+            self.notify.notify_one();
+        }
+    }
+
+    fn notify_waiting(&self) {
+        if self.write_requested.load(Ordering::SeqCst) {
+            self.notify.notify_one();
+        }
+    }
+
+    async fn wait_for_read(&self) {
+        self.notify.notified().await;
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -208,6 +245,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     downloaded: Downloaded,
     requested_position: RequestedPosition,
     position_reached: PositionReached,
+    notify_read: NotifyRead,
     content_length: Option<u64>,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
@@ -215,6 +253,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     on_progress: Option<CallbackFn<S>>,
     prefetch_complete: bool,
     prefetch_start_position: u64,
+    remaining_bytes: Option<Bytes>,
 }
 
 impl<S: SourceStream, H: StorageWriter> Source<S, H>
@@ -228,6 +267,7 @@ where
             downloaded: Downloaded::default(),
             requested_position: RequestedPosition::default(),
             position_reached: PositionReached::default(),
+            notify_read: NotifyRead::default(),
             seek_tx,
             seek_rx,
             content_length,
@@ -235,6 +275,7 @@ where
             prefetch_bytes: settings.prefetch_bytes,
             on_progress: settings.on_progress,
             prefetch_start_position: 0,
+            remaining_bytes: None,
         }
     }
 
@@ -307,17 +348,28 @@ where
 
             return self.finish_or_find_next_gap(stream).await;
         };
-        self.writer.write_all(&bytes)?;
+        let written = self.writer.write(&bytes)?;
         self.writer.flush()?;
-        let stream_position = self.writer.stream_position()?;
 
-        if stream_position >= start_position + self.prefetch_bytes {
+        let stream_position = self.writer.stream_position()?;
+        let partial_write = written < bytes.len();
+
+        // End prefetch early if we weren't able to write the entire contents
+        if partial_write {
+            debug!(
+                written,
+                bytes_len = bytes.len(),
+                "failed to write all during prefetch"
+            );
+            self.remaining_bytes = Some(bytes.slice(written..));
+        }
+        if (stream_position >= start_position + self.prefetch_bytes) || partial_write {
             self.downloaded.add(start_position..stream_position);
             debug!("prefetch complete");
             self.prefetch_complete = true;
         }
 
-        self.report_prefetch_progress(stream, stream_position, download_start, bytes.len());
+        self.report_prefetch_progress(stream, stream_position, download_start, written);
         Ok(DownloadStatus::Continue)
     }
 
@@ -358,37 +410,74 @@ where
                 .await;
         }
 
-        let Some(bytes) = bytes else {
-            return self.finish_or_find_next_gap(stream).await;
-        };
-
-        let position = self.writer.stream_position()?;
-        self.writer.write_all(&bytes)?;
-        self.writer.flush()?;
-        let new_position = self.writer.stream_position()?;
-
-        trace!(
-            previous_position = position,
-            new_position,
-            chunk_size = bytes.len(),
-            "received response chunk"
-        );
-
-        self.downloaded.add(position..new_position);
-        if let Some(requested) = self.requested_position.get() {
-            debug!(
-                requested_position = requested,
-                current_position = new_position,
-                "received requested position"
-            );
-
-            if new_position >= requested {
-                self.requested_position.clear();
-                self.position_reached.notify_position_reached();
+        let bytes = match (self.remaining_bytes.take(), bytes) {
+            (Some(remaining), Some(bytes)) => {
+                let mut combined = BytesMut::new();
+                combined.put(remaining);
+                combined.put(bytes);
+                combined.freeze()
             }
-        }
-        self.report_downloading_progress(stream, new_position, download_start, bytes.len())?;
+            (Some(remaining), None) => remaining,
+            (None, Some(bytes)) => bytes,
+            (None, None) => {
+                return self.finish_or_find_next_gap(stream).await;
+            }
+        };
+        let bytes_len = bytes.len();
+        let new_position = self.write(bytes).await?;
+        self.report_downloading_progress(stream, new_position, download_start, bytes_len)?;
+
         Ok(DownloadStatus::Continue)
+    }
+
+    async fn write(&mut self, bytes: Bytes) -> io::Result<u64> {
+        let mut written = 0;
+        let position = self.writer.stream_position()?;
+        let mut new_position = position;
+        // Keep writing until we process the whole buffer.
+        // If the reader is falling behind, this may take several attempts.
+        while written < bytes.len() {
+            self.notify_read.request();
+            let new_written = self.writer.write(&bytes[written..])?;
+            trace!(written, new_written, len = bytes.len(), "wrote data");
+
+            if new_written > 0 {
+                self.writer.flush()?;
+                written += new_written;
+            }
+            new_position = self.writer.stream_position()?;
+            if new_position > position {
+                self.downloaded.add(position..new_position);
+            }
+
+            if let Some(requested) = self.requested_position.get() {
+                debug!(
+                    requested_position = requested,
+                    current_position = new_position,
+                    "received requested position"
+                );
+
+                if new_position >= requested {
+                    debug!("notifying position reached");
+                    self.requested_position.clear();
+                    self.position_reached.notify_position_reached();
+                }
+            }
+            if new_written == 0 {
+                // We're not able to write any data, so we need to wait for space to be available
+                debug!("waiting for next read");
+                self.notify_read.wait_for_read().await;
+                debug!("read finished");
+            }
+
+            trace!(
+                previous_position = position,
+                new_position,
+                chunk_size = bytes.len(),
+                "received response chunk"
+            );
+        }
+        Ok(new_position)
     }
 
     fn should_seek(&mut self, position: u64) -> io::Result<bool> {
@@ -482,6 +571,7 @@ where
         SourceHandle {
             downloaded: self.downloaded.clone(),
             requested_position: self.requested_position.clone(),
+            notify_read: self.notify_read.clone(),
             position_reached: self.position_reached.clone(),
             seek_tx: self.seek_tx.clone(),
             content_length: self.content_length,
