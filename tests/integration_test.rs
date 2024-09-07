@@ -12,18 +12,19 @@ use futures::{Stream, StreamExt};
 use opendal::{services, Operator};
 use rstest::rstest;
 use setup::{SERVER_ADDR, SERVER_RT};
-use stream_download::http::HttpStream;
+use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
-use stream_download::source::SourceStream;
+use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::storage::StorageProvider;
-use stream_download::{http, Settings, StreamDownload};
+use stream_download::{http, Settings, StreamDownload, StreamInitializationError};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::spawn_blocking;
 
+#[derive(Debug)]
 struct TestClient {
     inner: reqwest::Client,
     tx: mpsc::Sender<(Command, oneshot::Sender<Duration>)>,
@@ -59,10 +60,7 @@ struct TestStream {
 impl Stream for TestStream {
     type Item = Result<Bytes, reqwest::Error>;
 
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.state {
             StreamState::Ready => {
                 let (tx, rx) = oneshot::channel();
@@ -158,8 +156,15 @@ impl http::Client for TestClient {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+#[error("{0}")]
+struct TestError(reqwest::Error);
+
+impl DecodeError for TestError {}
+
 impl http::ClientResponse for TestResponse {
-    type Error = reqwest::Error;
+    type ResponseError = TestError;
+    type StreamError = reqwest::Error;
     type Headers = reqwest::header::HeaderMap;
 
     fn content_length(&self) -> Option<u64> {
@@ -178,15 +183,17 @@ impl http::ClientResponse for TestResponse {
         http::ClientResponse::headers(&self.inner)
     }
 
-    fn is_success(&self) -> bool {
-        self.inner.is_success()
+    fn into_result(self) -> Result<Self, Self::ResponseError> {
+        if let Err(error) = self.inner.error_for_status_ref() {
+            Err(TestError(error))
+        } else {
+            Ok(self)
+        }
     }
 
-    fn status_error(self) -> Result<(), Self::Error> {
-        self.inner.status_error()
-    }
-
-    fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync> {
+    fn stream(
+        self,
+    ) -> Box<dyn Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync> {
         Box::new(TestStream {
             tx: self.tx.clone(),
             inner: self.inner.stream(),
@@ -365,7 +372,10 @@ fn handle_error() {
         .await;
         assert!(reader.is_err());
         let err = reader.unwrap_err();
-        assert_eq!(io::ErrorKind::InvalidInput, err.kind());
+        assert!(matches!(
+            err,
+            StreamInitializationError::StreamCreationFailure(HttpStreamError::ResponseFailure(_))
+        ));
     });
 }
 

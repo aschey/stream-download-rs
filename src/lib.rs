@@ -20,12 +20,11 @@ use std::ops::Range;
 use std::time::Duration;
 
 use educe::Educe;
-use source::{Source, SourceHandle, SourceStream};
+use source::{DecodeError, Source, SourceHandle, SourceStream};
 use storage::StorageProvider;
 use tap::{Tap, TapFallible};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
-
 #[cfg(feature = "http")]
 pub mod http;
 #[cfg(feature = "open-dal")]
@@ -181,23 +180,32 @@ impl<P: StorageProvider> StreamDownload<P> {
     ///
     /// ```no_run
     /// use std::error::Error;
-    /// use std::io::Read;
+    /// use std::io::{self, Read};
     /// use std::result::Result;
     ///
+    /// use stream_download::source::DecodeError;
     /// use stream_download::storage::temp::TempStorageProvider;
     /// use stream_download::{Settings, StreamDownload};
     ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn Error>> {
-    ///     let mut reader = StreamDownload::new_http(
+    ///     let mut reader = match StreamDownload::new_http(
     ///         "https://some-cool-url.com/some-file.mp3".parse()?,
     ///         TempStorageProvider::default(),
     ///         Settings::default(),
     ///     )
-    ///     .await?;
+    ///     .await
+    ///     {
+    ///         Ok(reader) => reader,
+    ///         Err(e) => return Err(e.decode_error().await)?,
+    ///     };
     ///
-    ///     let mut buf = Vec::new();
-    ///     reader.read_to_end(&mut buf)?;
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
     ///     Ok(())
     /// }
     /// ```
@@ -205,7 +213,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         url: ::reqwest::Url,
         storage_provider: P,
         settings: Settings<http::HttpStream<::reqwest::Client>>,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, StreamInitializationError<http::HttpStream<::reqwest::Client>>> {
         Self::new(url, storage_provider, settings).await
     }
 
@@ -217,7 +225,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     ///
     /// ```no_run
     /// use std::error::Error;
-    /// use std::io::Read;
+    /// use std::io::{self, Read};
     /// use std::result::Result;
     ///
     /// use opendal::{services, Operator};
@@ -241,8 +249,12 @@ impl<P: StorageProvider> StreamDownload<P> {
     ///     )
     ///     .await?;
     ///
-    ///     let mut buf = Vec::new();
-    ///     reader.read_to_end(&mut buf)?;
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
     ///     Ok(())
     /// }
     /// ```
@@ -250,7 +262,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         params: open_dal::OpenDalStreamParams,
         storage_provider: P,
         settings: Settings<open_dal::OpenDalStream>,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, StreamInitializationError<open_dal::OpenDalStream>> {
         Self::new(params, storage_provider, settings).await
     }
 
@@ -260,7 +272,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     ///
     /// ```no_run
     /// use std::error::Error;
-    /// use std::io::Read;
+    /// use std::io::{self, Read};
     /// use std::result::Result;
     ///
     /// use reqwest::Client;
@@ -268,26 +280,40 @@ impl<P: StorageProvider> StreamDownload<P> {
     /// use stream_download::storage::temp::TempStorageProvider;
     /// use stream_download::{Settings, StreamDownload};
     ///
+    /// use crate::stream_download::source::DecodeError;
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn Error>> {
-    ///     let mut reader = StreamDownload::new::<HttpStream<Client>>(
+    ///     let mut reader = match StreamDownload::new::<HttpStream<Client>>(
     ///         "https://some-cool-url.com/some-file.mp3".parse()?,
     ///         TempStorageProvider::default(),
     ///         Settings::default(),
     ///     )
-    ///     .await?;
+    ///     .await
+    ///     {
+    ///         Ok(reader) => reader,
+    ///         Err(e) => return Err(e.decode_error().await)?,
+    ///     };
     ///
-    ///     let mut buf = Vec::new();
-    ///     reader.read_to_end(&mut buf)?;
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
     ///     Ok(())
     /// }
     /// ```
-    pub async fn new<S: SourceStream>(
+    pub async fn new<S>(
         url: S::Params,
         storage_provider: P,
         settings: Settings<S>,
-    ) -> io::Result<Self> {
-        Self::from_make_stream(move || S::create(url), storage_provider, settings).await
+    ) -> Result<Self, StreamInitializationError<S>>
+    where
+        S: SourceStream,
+        S::Error: Debug + Send,
+    {
+        Self::from_create_stream(move || S::create(url), storage_provider, settings).await
     }
 
     /// Creates a new [`StreamDownload`] from a [`SourceStream`].
@@ -304,6 +330,8 @@ impl<P: StorageProvider> StreamDownload<P> {
     /// use stream_download::storage::temp::TempStorageProvider;
     /// use stream_download::{Settings, StreamDownload};
     ///
+    /// use crate::stream_download::source::DecodeError;
+    ///
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn Error>> {
     ///     let stream = HttpStream::new(
@@ -312,21 +340,29 @@ impl<P: StorageProvider> StreamDownload<P> {
     ///     )
     ///     .await?;
     ///
-    ///     let mut reader = StreamDownload::from_stream(
+    ///     let mut reader = match StreamDownload::from_stream(
     ///         stream,
     ///         TempStorageProvider::default(),
     ///         Settings::default(),
     ///     )
-    ///     .await?;
+    ///     .await
+    ///     {
+    ///         Ok(reader) => reader,
+    ///         Err(e) => Err(e.decode_error().await)?,
+    ///     };
     ///     Ok(())
     /// }
     /// ```
-    pub async fn from_stream<S: SourceStream>(
+    pub async fn from_stream<S>(
         stream: S,
         storage_provider: P,
         settings: Settings<S>,
-    ) -> Result<Self, io::Error> {
-        Self::from_make_stream(
+    ) -> Result<Self, StreamInitializationError<S>>
+    where
+        S: SourceStream,
+        S::Error: Debug + Send,
+    {
+        Self::from_create_stream(
             move || future::ready(Ok(stream)),
             storage_provider,
             settings,
@@ -345,19 +381,24 @@ impl<P: StorageProvider> StreamDownload<P> {
         self.download_task_cancellation_token.clone()
     }
 
-    async fn from_make_stream<S, F, Fut>(
-        make_stream: F,
+    async fn from_create_stream<S, F, Fut>(
+        create_stream: F,
         storage_provider: P,
         settings: Settings<S>,
-    ) -> Result<Self, io::Error>
+    ) -> Result<Self, StreamInitializationError<S>>
     where
         S: SourceStream,
+        S::Error: Debug + Send,
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: Future<Output = io::Result<S>> + Send,
+        Fut: Future<Output = Result<S, S::StreamCreationError>> + Send,
     {
-        let stream = make_stream().await.wrap_err("error creating stream")?;
+        let stream = create_stream()
+            .await
+            .map_err(StreamInitializationError::StreamCreationFailure)?;
         let content_length = stream.content_length();
-        let (reader, writer) = storage_provider.into_reader_writer(content_length)?;
+        let (reader, writer) = storage_provider
+            .into_reader_writer(content_length)
+            .map_err(StreamInitializationError::StorageCreationFailure)?;
         let source = Source::new(writer, content_length, settings);
         let handle = source.source_handle();
         let cancellation_token = CancellationToken::new();
@@ -401,6 +442,27 @@ impl<P: StorageProvider> StreamDownload<P> {
                 (self.output_reader.stream_position()? as i64 + position) as u64
             }
         })
+    }
+}
+
+/// Error returned when initializing a stream.
+#[derive(thiserror::Error, Educe)]
+#[educe(Debug)]
+pub enum StreamInitializationError<S: SourceStream> {
+    /// Storage creation failure.
+    #[error("Storage creation failure: {0}")]
+    StorageCreationFailure(io::Error),
+    /// Stream creation failure.
+    #[error("Stream creation failure: {0}")]
+    StreamCreationFailure(<S as SourceStream>::StreamCreationError),
+}
+
+impl<S: SourceStream> DecodeError for StreamInitializationError<S> {
+    async fn decode_error(self) -> String {
+        match self {
+            this @ Self::StorageCreationFailure(_) => this.to_string(),
+            Self::StreamCreationFailure(e) => e.decode_error().await,
+        }
     }
 }
 

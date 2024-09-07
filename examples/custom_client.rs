@@ -2,7 +2,7 @@ use std::error::Error;
 use std::time::Instant;
 
 use stream_download::http::{format_range_header_bytes, Client, HttpStream, RANGE_HEADER_KEY};
-use stream_download::source::SourceStream;
+use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 use tracing::info;
@@ -12,6 +12,8 @@ use tracing_subscriber::EnvFilter;
 // If you need to perform some dynamic logic before sending each HTTP request,
 // implement the `Client` trait.
 // Here we show how you might pass in bearer tokens.
+
+#[derive(Debug)]
 struct BearerAuthClient(reqwest::Client);
 
 impl Client for BearerAuthClient {
@@ -77,8 +79,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("content type={:?}", stream.content_type());
 
     let reader =
-        StreamDownload::from_stream(stream, TempStorageProvider::new(), Settings::default())
-            .await?;
+        match StreamDownload::from_stream(stream, TempStorageProvider::new(), Settings::default())
+            .await
+        {
+            Ok(reader) => reader,
+            Err(e) => Err(e.decode_error().await)?,
+        };
     sink.append(rodio::Decoder::new(reader)?);
 
     let handle = tokio::task::spawn_blocking(move || {

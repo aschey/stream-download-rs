@@ -3,7 +3,7 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use stream_download::http::HttpStream;
-use stream_download::source::SourceStream;
+use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload, StreamPhase};
 use tracing::info;
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .init();
 
     let last_event = RwLock::new(Instant::now());
-    let reader = StreamDownload::new_http(
+    let reader = match StreamDownload::new_http(
         "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
          No 6 - Movement 2 Un poco andante.MP3"
             .parse()?,
@@ -62,7 +62,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }
         }),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => return Err(e.decode_error().await)?,
+    };
 
     tokio::task::spawn_blocking(move || {
         let (_stream, handle) = rodio::OutputStream::try_default()?;

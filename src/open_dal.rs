@@ -41,7 +41,7 @@ use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
 use tokio_util::io::poll_read_buf;
 use tracing::instrument;
 
-use crate::source::SourceStream;
+use crate::source::{DecodeError, SourceStream};
 use crate::WrapIoResult;
 
 /// Parameters for creating an `OpenDAL` stream.
@@ -100,16 +100,18 @@ impl Debug for OpenDalStream {
     }
 }
 
+/// Error returned from `OpenDAL`
+#[derive(thiserror::Error, Debug)]
+#[error("{0}")]
+pub struct Error(#[from] opendal::Error);
+
+impl DecodeError for Error {}
+
 impl OpenDalStream {
     /// Creates a new [`OpenDalStream`].
     #[instrument]
-    pub async fn new(params: OpenDalStreamParams) -> io::Result<Self> {
-        let stat = params
-            .operator
-            .stat(&params.path)
-            .await
-            .map_err(|e| e.into())
-            .wrap_err("error fetching metadata")?;
+    pub async fn new(params: OpenDalStreamParams) -> Result<Self, Error> {
+        let stat = params.operator.stat(&params.path).await?;
 
         let content_length = if stat.metakey().contains(Metakey::ContentLength) {
             // content_length() will panic if called when the ContentLength Metakey is not present
@@ -120,20 +122,9 @@ impl OpenDalStream {
 
         let content_type = stat.content_type().map(|t| t.to_string());
 
-        let reader = params
-            .operator
-            .reader(&params.path)
-            .await
-            .map_err(|e| e.into())
-            .wrap_err("error creating reader")?;
+        let reader = params.operator.reader(&params.path).await?;
 
-        let async_reader = reader
-            .clone()
-            .into_futures_async_read(..)
-            .await
-            .map_err(|e| e.into())
-            .wrap_err("error creating async reader")?
-            .compat();
+        let async_reader = reader.clone().into_futures_async_read(..).await?.compat();
 
         Ok(Self {
             async_reader,
@@ -154,9 +145,9 @@ impl OpenDalStream {
 impl SourceStream for OpenDalStream {
     type Params = OpenDalStreamParams;
 
-    type StreamError = io::Error;
+    type StreamCreationError = Error;
 
-    async fn create(params: Self::Params) -> io::Result<Self> {
+    async fn create(params: Self::Params) -> Result<Self, Self::StreamCreationError> {
         Self::new(params).await
     }
 

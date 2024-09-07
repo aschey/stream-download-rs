@@ -2,6 +2,7 @@ use std::env::args;
 use std::error::Error;
 use std::num::NonZeroUsize;
 
+use stream_download::source::DecodeError;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
@@ -23,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let sink = rodio::Sink::try_new(&handle)?;
 
     let settings = Settings::default();
-    let reader = StreamDownload::new_http(
+    let reader = match StreamDownload::new_http(
         url.parse()?,
         // use adaptive storage to keep the underlying size bounded when the stream has no content
         // length
@@ -34,7 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ),
         settings,
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => return Err(e.decode_error().await)?,
+    };
     sink.append(rodio::Decoder::new(reader)?);
 
     let handle = tokio::task::spawn_blocking(move || {
