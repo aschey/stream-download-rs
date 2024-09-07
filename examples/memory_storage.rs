@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use stream_download::source::DecodeError;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
@@ -12,14 +13,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
-    let reader = StreamDownload::new_http(
+    let reader = match StreamDownload::new_http(
         "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
          No 6 - Movement 2 Un poco andante.MP3"
             .parse()?,
         MemoryStorageProvider,
         Settings::default(),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => return Err(e.decode_error().await)?,
+    };
 
     tokio::task::spawn_blocking(move || {
         let (_stream, handle) = rodio::OutputStream::try_default()?;

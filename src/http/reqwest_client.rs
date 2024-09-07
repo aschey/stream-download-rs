@@ -1,3 +1,5 @@
+//! Adapters for using [`reqwest`] with `stream-download`
+
 use std::str::FromStr;
 use std::sync::OnceLock;
 
@@ -7,7 +9,7 @@ use reqwest::header::{self, AsHeaderName, HeaderMap};
 use tap::TapFallible;
 use tracing::warn;
 
-use super::{format_range_header_bytes, RANGE_HEADER_KEY};
+use super::{format_range_header_bytes, DecodeError, RANGE_HEADER_KEY};
 use crate::http::{Client, ClientResponse, ResponseHeaders};
 
 impl ResponseHeaders for HeaderMap {
@@ -24,8 +26,39 @@ fn get_header_str<K: AsHeaderName>(headers: &HeaderMap, key: K) -> Option<&str> 
     })
 }
 
+/// Error returned when making an HTTP call
+#[derive(thiserror::Error, Debug)]
+#[error("Failed to fetch: {source}")]
+pub struct FetchError {
+    #[source]
+    source: reqwest::Error,
+    response: reqwest::Response,
+}
+
+impl FetchError {
+    /// Error source.
+    pub fn source(&self) -> &reqwest::Error {
+        &self.source
+    }
+
+    /// Http response.
+    pub fn response(&self) -> &reqwest::Response {
+        &self.response
+    }
+}
+
+impl DecodeError for FetchError {
+    async fn decode_error(self) -> String {
+        match self.response.text().await {
+            Ok(text) => format!("{}: {text}", self.source),
+            Err(e) => format!("{}. Error decoding response: {e}", self.source),
+        }
+    }
+}
+
 impl ClientResponse for reqwest::Response {
-    type Error = reqwest::Error;
+    type ResponseError = FetchError;
+    type StreamError = reqwest::Error;
     type Headers = HeaderMap;
 
     fn content_length(&self) -> Option<u64> {
@@ -44,15 +77,20 @@ impl ClientResponse for reqwest::Response {
         self.headers().clone()
     }
 
-    fn is_success(&self) -> bool {
-        self.status().is_success()
+    fn into_result(self) -> Result<Self, Self::ResponseError> {
+        if let Err(error) = self.error_for_status_ref() {
+            Err(FetchError {
+                source: error,
+                response: self,
+            })
+        } else {
+            Ok(self)
+        }
     }
 
-    fn status_error(self) -> Result<(), Self::Error> {
-        self.error_for_status().map(|_| ())
-    }
-
-    fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync> {
+    fn stream(
+        self,
+    ) -> Box<dyn Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync> {
         Box::new(self.bytes_stream())
     }
 }

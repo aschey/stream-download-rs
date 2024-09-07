@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 
 use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
-use stream_download::source::SourceStream;
+use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let prefetch_bytes = bitrate / 8 * 1024 * 5;
     info!("prefetch bytes={prefetch_bytes}");
 
-    let reader = StreamDownload::from_stream(
+    let reader = match StreamDownload::from_stream(
         stream,
         // use bounded storage to keep the underlying size from growing indefinitely
         BoundedStorageProvider::new(
@@ -49,7 +49,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ),
         Settings::default().prefetch_bytes(prefetch_bytes),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => Err(e.decode_error().await)?,
+    };
     sink.append(rodio::Decoder::new(reader)?);
 
     let handle = tokio::task::spawn_blocking(move || {

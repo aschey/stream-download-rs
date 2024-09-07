@@ -37,31 +37,36 @@ One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use h
 
 ```rust,no_run
 use std::error::Error;
-use std::io::Read;
 use std::io;
+use std::io::Read;
 use std::result::Result;
 
+use stream_download::source::DecodeError;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mut reader = StreamDownload::new_http(
+    let mut reader = match StreamDownload::new_http(
         "https://some-cool-url.com/some-file.mp3".parse()?,
         TempStorageProvider::new(),
         Settings::default(),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => Err(e.decode_error().await)?,
+    };
 
     tokio::task::spawn_blocking(move || {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf)?;
         Ok::<_, io::Error>(())
-    }).await??;
-    
+    })
+    .await??;
+
     Ok(())
 }
-
 ```
 
 ## Examples
@@ -70,7 +75,8 @@ See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
 
 ## Transports
 
-Transports implement the [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait. Two types of transports are provided out of the box - [`http`](https://docs.rs/stream-download/latest/stream_download/http) for typical HTTP-based sources and [`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal) which is more complex, but supports a large variety of services.
+Transports implement the [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait.
+Two types of transports are provided out of the box - [`http`](https://docs.rs/stream-download/latest/stream_download/http) for typical HTTP-based sources and [`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal) which is more complex, but supports a large variety of services.
 
 Only `http` is enabled by default.
 You can provide a custom transport by implementing `SourceStream` yourself.
@@ -84,12 +90,13 @@ If it's necessary to explicitly check for an infinite stream, you can check the 
 
 ```rust,no_run
 use std::error::Error;
-use std::io::Read;
 use std::io;
+use std::io::Read;
 use std::result::Result;
 
-use stream_download::http::HttpStream;
 use stream_download::http::reqwest::Client;
+use stream_download::http::HttpStream;
+use stream_download::source::DecodeError;
 use stream_download::source::SourceStream;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
@@ -102,16 +109,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let is_infinite = content_length.is_none();
     println!("Infinite stream = {is_infinite}");
 
-    let mut reader =
-        StreamDownload::from_stream(stream, TempStorageProvider::default(), Settings::default())
-            .await?;
+    let mut reader = match StreamDownload::from_stream(
+        stream,
+        TempStorageProvider::default(),
+        Settings::default(),
+    )
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => Err(e.decode_error().await)?,
+    };
 
     tokio::task::spawn_blocking(move || {
         let mut buf = [0; 256];
         reader.read_exact(&mut buf)?;
         Ok::<_, io::Error>(())
-    }).await??;
- 
+    })
+    .await??;
+
     Ok(())
 }
 ```
@@ -132,18 +147,23 @@ use std::error::Error;
 use std::io::Read;
 use std::result::Result;
 
+use stream_download::source::DecodeError;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mut reader = StreamDownload::new_http(
+    let mut reader = match StreamDownload::new_http(
         "https://some-cool-url.com/some-file.mp3".parse()?,
         // buffer will be stored in memory instead of on disk
         MemoryStorageProvider,
         Settings::default(),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => Err(e.decode_error().await)?,
+    };
 
     Ok(())
 }
@@ -161,13 +181,14 @@ use std::io::Read;
 use std::num::NonZeroUsize;
 use std::result::Result;
 
+use stream_download::source::DecodeError;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mut reader = StreamDownload::new_http(
+    let mut reader = match StreamDownload::new_http(
         "https://some-cool-url.com/some-file.mp3".parse()?,
         // use bounded storage to keep the underlying size from growing indefinitely
         BoundedStorageProvider::new(
@@ -179,7 +200,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ),
         Settings::default(),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => Err(e.decode_error().await)?,
+    };
 
     Ok(())
 }
@@ -196,13 +221,14 @@ use std::io::Read;
 use std::num::NonZeroUsize;
 use std::result::Result;
 
+use stream_download::source::DecodeError;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mut reader = StreamDownload::new_http(
+    let mut reader = match StreamDownload::new_http(
         "https://some-cool-url.com/some-file.mp3".parse()?,
         // use adaptive storage to keep the underlying size from growing indefinitely
         // when the content type is not known
@@ -215,7 +241,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ),
         Settings::default(),
     )
-    .await?;
+    .await
+    {
+        Ok(reader) => reader,
+        Err(e) => return Err(e.decode_error().await)?,
+    };
 
     Ok(())
 }

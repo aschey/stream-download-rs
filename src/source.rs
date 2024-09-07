@@ -1,6 +1,8 @@
 //! Provides the [`SourceStream`] trait which abstracts over the transport used to
 //! stream remote content.
 use std::error::Error;
+use std::fmt::Debug;
+use std::future;
 use std::io::{self, SeekFrom};
 use std::ops::Range;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -8,7 +10,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
-use futures::{Future, Stream, StreamExt};
+use futures::{Future, Stream, StreamExt, TryStream};
 use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tap::TapFallible;
@@ -27,16 +29,24 @@ use crate::{CallbackFn, Settings, StreamPhase, StreamState};
 /// The implementation must also implement the
 /// [Stream](https://docs.rs/futures/latest/futures/stream/trait.Stream.html) trait.
 pub trait SourceStream:
-    Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync + Sized + 'static
+    TryStream<Ok = Bytes>
+    + Stream<Item = Result<Self::Ok, Self::Error>>
+    + Unpin
+    + Send
+    + Sync
+    + Sized
+    + 'static
 {
     /// Parameters used to create the remote resource.
     type Params: Send;
 
-    /// Error type thrown by the underlying stream.
-    type StreamError: Error + Send;
+    /// Error type thrown when creating the stream.
+    type StreamCreationError: DecodeError + Send;
 
     /// Creates an instance of the stream.
-    fn create(params: Self::Params) -> impl Future<Output = io::Result<Self>> + Send;
+    fn create(
+        params: Self::Params,
+    ) -> impl Future<Output = Result<Self, Self::StreamCreationError>> + Send;
 
     /// Returns the size of the remote resource in bytes. The result should be `None`
     /// if the stream is infinite or doesn't have a known length.
@@ -49,7 +59,15 @@ pub trait SourceStream:
         &mut self,
         start: u64,
         end: Option<u64>,
-    ) -> impl Future<Output = io::Result<()>> + Send;
+    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+}
+
+/// Trait for decoding extra error information asynchronously.
+pub trait DecodeError: Error + Send + Sized {
+    /// Decode extra error information.
+    fn decode_error(self) -> impl Future<Output = String> + Send {
+        future::ready(self.to_string())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -199,7 +217,10 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     prefetch_start_position: u64,
 }
 
-impl<S: SourceStream, H: StorageWriter> Source<S, H> {
+impl<S: SourceStream, H: StorageWriter> Source<S, H>
+where
+    S::Error: Debug,
+{
     pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings<S>) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(settings.seek_buffer_size);
         Self {
@@ -320,7 +341,7 @@ impl<S: SourceStream, H: StorageWriter> Source<S, H> {
     async fn handle_bytes(
         &mut self,
         stream: &mut S,
-        bytes: Option<Result<Bytes, S::StreamError>>,
+        bytes: Option<Result<Bytes, S::Error>>,
         download_start: Instant,
     ) -> io::Result<DownloadStatus> {
         let bytes = match bytes.transpose() {

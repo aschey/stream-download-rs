@@ -29,7 +29,7 @@
 //! ```
 
 use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::pin::Pin;
 use std::task::{self, Poll};
@@ -43,11 +43,11 @@ use mediatype::MediaTypeBuf;
 pub use reqwest;
 use tracing::{debug, instrument, warn};
 
-use crate::source::SourceStream;
+use crate::source::{DecodeError, SourceStream};
 use crate::WrapIoResult;
 
 #[cfg(feature = "reqwest")]
-mod reqwest_client;
+pub mod reqwest_client;
 
 /// Wrapper trait for an HTTP client that exposes only functionality necessary for retrieving the
 /// stream content. If the `reqwest` feature is enabled, this trait is implemented for
@@ -61,7 +61,7 @@ pub trait Client: Send + Sync + Unpin + 'static {
     type Headers: ResponseHeaders;
 
     /// The HTTP response object.
-    type Response: ClientResponse<Error = Self::Error, Headers = Self::Headers>;
+    type Response: ClientResponse<Headers = Self::Headers>;
 
     /// The error type returned by HTTP requests.
     type Error: Error + Send + Sync;
@@ -106,9 +106,11 @@ pub trait ResponseHeaders: Send + Sync + Unpin {
 /// this trait is implemented for
 /// [reqwest::Response](https://docs.rs/reqwest/latest/reqwest/struct.Response.html).
 /// This can be implemented for a custom HTTP response if desired.
-pub trait ClientResponse: Send + Sync {
-    /// Error type returned by the underlying response stream.
-    type Error;
+pub trait ClientResponse: Send + Sync + Sized {
+    /// Error type returned by the underlying response.
+    type ResponseError: DecodeError + Send;
+    /// Error type returned by the stream.
+    type StreamError: Error + Send + Sync;
     /// Object containing HTTP response headers.
     type Headers: ResponseHeaders;
 
@@ -123,14 +125,13 @@ pub trait ClientResponse: Send + Sync {
     /// Object containing HTTP response headers.
     fn headers(&self) -> Self::Headers;
 
-    /// Checks if the response status is successful.
-    fn is_success(&self) -> bool;
-
     /// Turns the response into an error if the response was not successful.
-    fn status_error(self) -> Result<(), Self::Error>;
+    fn into_result(self) -> Result<Self, Self::ResponseError>;
 
     /// Converts the response into a byte stream
-    fn stream(self) -> Box<dyn Stream<Item = Result<Bytes, Self::Error>> + Unpin + Send + Sync>;
+    fn stream(
+        self,
+    ) -> Box<dyn Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync>;
 }
 
 fn fmt<T>(val: &T, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error>
@@ -140,12 +141,38 @@ where
     write!(fmt, "{val}")
 }
 
+/// Error returned from an HTTP stream.
+#[derive(thiserror::Error, Educe)]
+#[educe(Debug)]
+pub enum HttpStreamError<C: Client> {
+    /// Failed to fetch.
+    #[error("Failed to fetch: {0}")]
+    FetchFailure(C::Error),
+    /// Failed to get response.
+    #[error("Failed to get response: {0}")]
+    ResponseFailure(<<C as Client>::Response as ClientResponse>::ResponseError),
+}
+
+impl<C: Client> DecodeError for HttpStreamError<C> {
+    async fn decode_error(self) -> String {
+        match self {
+            Self::ResponseFailure(e) => e.decode_error().await,
+            this @ Self::FetchFailure(_) => this.to_string(),
+        }
+    }
+}
+
 /// An HTTP implementation of the [`SourceStream`] trait.
 #[derive(Educe)]
 #[educe(Debug)]
 pub struct HttpStream<C: Client> {
     #[educe(Debug = false)]
-    stream: Box<dyn Stream<Item = Result<Bytes, C::Error>> + Unpin + Send + Sync>,
+    stream: Box<
+        dyn Stream<Item = Result<Bytes, <<C as Client>::Response as ClientResponse>::StreamError>>
+            + Unpin
+            + Send
+            + Sync,
+    >,
     client: C,
     content_length: Option<u64>,
     content_type: Option<ContentType>,
@@ -158,22 +185,25 @@ pub struct HttpStream<C: Client> {
 impl<C: Client> HttpStream<C> {
     /// Creates a new [HttpStream] from a [Client].
     #[instrument(skip(client, url), fields(url = url.to_string()))]
-    pub async fn new(client: C, url: <Self as SourceStream>::Params) -> io::Result<Self> {
+    pub async fn new(
+        client: C,
+        url: <Self as SourceStream>::Params,
+    ) -> Result<Self, HttpStreamError<C>> {
         debug!("requesting stream content");
         let request_start = Instant::now();
 
         let response = client
             .get(&url)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
-            .wrap_err(&format!("error fetching {url}"))?;
+            .map_err(HttpStreamError::FetchFailure)?;
         debug!(
             duration = format!("{:?}", request_start.elapsed()),
             "request finished"
         );
 
-        let response = check_error_response(response, "unknown error from HTTP request")
-            .wrap_err(&format!("error fetching {url}"))?;
+        let response = response
+            .into_result()
+            .map_err(HttpStreamError::ResponseFailure)?;
         let content_length = response.content_length().map_or_else(
             || {
                 warn!("content length header missing");
@@ -235,7 +265,7 @@ impl<C: Client> HttpStream<C> {
 }
 
 impl<C: Client> Stream for HttpStream<C> {
-    type Item = Result<Bytes, C::Error>;
+    type Item = Result<Bytes, <<C as Client>::Response as ClientResponse>::StreamError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.stream).poll_next(cx)
@@ -244,9 +274,9 @@ impl<C: Client> Stream for HttpStream<C> {
 
 impl<C: Client> SourceStream for HttpStream<C> {
     type Params = C::Url;
-    type StreamError = C::Error;
+    type StreamCreationError = HttpStreamError<C>;
 
-    async fn create(params: Self::Params) -> io::Result<Self> {
+    async fn create(params: Self::Params) -> Result<Self, Self::StreamCreationError> {
         Self::new(C::create(), params).await
     }
 
@@ -270,15 +300,23 @@ impl<C: Client> SourceStream for HttpStream<C> {
             .client
             .get_range(&self.url, start, end)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
             .wrap_err(&format!("error sending HTTP range request to {}", self.url))?;
         debug!(
             duration = format!("{:?}", request_start.elapsed()),
             "HTTP request finished"
         );
 
-        let response = check_error_response(response, "unknown error from HTTP range request")
-            .wrap_err(&format!("error sending HTTP range request to {}", self.url))?;
+        let response = match response.into_result() {
+            Ok(response) => Ok(response),
+            Err(e) => {
+                let error = e.decode_error().await;
+                Err(io::Error::new(io::ErrorKind::Other, error)).wrap_err(&format!(
+                    "error getting HTTP range response from {}",
+                    self.url
+                ))
+            }
+        }?;
         self.stream = Box::new(response.stream());
         debug!("done seeking");
         Ok(())
@@ -296,20 +334,4 @@ pub fn format_range_header_bytes(start: u64, end: Option<u64>) -> String {
         "bytes={start}-{}",
         end.map(|e| e.to_string()).unwrap_or_default()
     )
-}
-
-fn check_error_response<R>(response: R, fallback_msg: &str) -> io::Result<R>
-where
-    R: ClientResponse,
-    <R as ClientResponse>::Error: Error + Send + Sync + 'static,
-{
-    if response.is_success() {
-        return Ok(response);
-    }
-
-    if let Err(e) = response.status_error() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, e));
-    }
-
-    Err(io::Error::new(io::ErrorKind::InvalidInput, fallback_msg))
 }
