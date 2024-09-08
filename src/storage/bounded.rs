@@ -10,6 +10,10 @@
 //! hold all of the data you will need at once. This needs to account for any seeking that may occur
 //! as well as the size of the initial prefetch phase.
 //!
+//! If the reader falls too far behind the writer, the writer will pause so the reader can catch up.
+//! However, if you attempt to seek backwards farther than the buffer size, the reader will
+//! return an error since that data has already been overwritten.
+//!
 //! If your inputs may or may not have a known content length, consider using an
 //! [`AdaptiveStorageProvider`](super::adaptive::AdaptiveStorageProvider) to automatically
 //! determine whether or not the overhead of maintaining a bounded buffer is necessary.
@@ -151,11 +155,6 @@ where
             ));
         }
 
-        if shared_info.read >= shared_info.written {
-            debug!("read bytes >= written bytes, ending read");
-            return Ok(0);
-        }
-
         if shared_info
             .write_position
             .saturating_sub(shared_info.read_position)
@@ -170,12 +169,24 @@ where
             ));
         }
 
+        if shared_info.read >= shared_info.written {
+            debug!("read bytes >= written bytes, ending read");
+            return Ok(0);
+        }
+
         let available_len = shared_info.write_position - shared_info.read_position;
         let size = shared_info.size.min(shared_info.write_position);
 
         let start = shared_info.mapped_read_position(0);
         let end = shared_info.mapped_read_position(buf.len().min(available_len) - 1) + 1;
-        trace!(start, end, size, buf_len = buf.len(), "bounded read");
+        trace!(
+            start,
+            end,
+            size,
+            buf_len = buf.len(),
+            read = shared_info.read,
+            "bounded read"
+        );
 
         let read_len = if start <= end {
             let read_len = end - start;
@@ -256,15 +267,30 @@ where
     #[instrument(skip(buf))]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut shared_info = self.shared_info.lock();
+        let space_taken = shared_info
+            .write_position
+            .saturating_sub(shared_info.read_position);
+        let size = shared_info.size.saturating_sub(space_taken).min(buf.len());
+        // If we don't have enough space to write the entire buffer, write as much as we can
+        let buf = &buf[..size];
+        if buf.is_empty() {
+            return Ok(0);
+        }
 
         let start = shared_info.mapped_write_position(0);
         let end = shared_info.mapped_write_position(buf.len() - 1) + 1;
-        trace!(start, end, buf_len = buf.len(), "bounded write");
+        trace!(
+            start,
+            end,
+            buf_len = buf.len(),
+            written = shared_info.written,
+            "bounded write"
+        );
 
         self.inner
             .seek(SeekFrom::Start(start as u64))
             .wrap_err("error seeking to mapped write start")?;
-        if start <= end {
+        if start < end {
             self.inner
                 .write_all(buf)
                 .wrap_err("error writing mapped segment")?;
@@ -285,6 +311,7 @@ where
         shared_info.written += buf.len();
 
         self.inner.flush().wrap_err("error flushing during write")?;
+
         Ok(buf.len())
     }
 

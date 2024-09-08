@@ -443,6 +443,14 @@ impl<P: StorageProvider> StreamDownload<P> {
             }
         })
     }
+
+    fn handle_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let res = self.output_reader.read(buf).tap(|l| {
+            trace!(read_length = format!("{l:?}"), "returning read");
+        });
+        self.handle.notify_read();
+        res
+    }
 }
 
 /// Error returned when initializing a stream.
@@ -489,12 +497,8 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
                 "current position already downloaded"
             );
             if closest_set.end >= requested_position {
-                return self.output_reader.read(buf).tap(|l| {
-                    trace!(
-                        read_length = format!("{l:?}"),
-                        "requested position already downloaded, returning read"
-                    );
-                });
+                debug!("requested position already downloaded");
+                return self.handle_read(buf);
             }
             debug!("requested position not yet downloaded");
         } else {
@@ -506,6 +510,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
             requested_position = requested_position,
             "waiting for requested position"
         );
+        self.handle.notify_waiting();
         self.handle.wait_for_requested_position();
         debug!(
             current_position = stream_position,
@@ -514,9 +519,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
             "reached requested position"
         );
 
-        self.output_reader
-            .read(buf)
-            .tap(|l| debug!(read_length = format!("{l:?}"), "returning read"))
+        self.handle_read(buf)
     }
 }
 
