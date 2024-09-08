@@ -724,7 +724,9 @@ fn seek_basic(
             let file_buf = get_file_buf();
             compare(&file_buf[..4096], initial_buf);
             compare(file_buf, buf);
-        });
+        })
+        .await
+        .unwrap();
 
         handle.await.unwrap();
     });
@@ -754,20 +756,21 @@ fn seek_basic_open_dal(
             let mut first_read = [0; 4096];
             reader.read_exact(&mut first_read).unwrap();
             let mut second_read = [0; 16];
-            reader.seek(SeekFrom::End(-16)).unwrap();
+            let seek_pos = reader.seek(SeekFrom::End(-16)).unwrap();
+            let file_buf = get_file_buf();
+            assert_eq!(seek_pos, (file_buf.len() - 16) as u64);
             reader.read_exact(&mut second_read).unwrap();
             reader.seek(SeekFrom::Start(0)).unwrap();
 
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
 
-            let file_buf = get_file_buf();
             compare(&file_buf[..4096], first_read);
             compare(&file_buf[file_buf.len() - 16..], second_read);
             compare(file_buf, buf);
-        });
-
-        // handle.await.unwrap();
+        })
+        .await
+        .unwrap();
     });
 }
 
@@ -829,7 +832,9 @@ fn seek_all(
             if seek_from1 == "start" {
                 reader.seek(SeekFrom::Start(seek_from_val1)).unwrap();
             } else if seek_from1 == "end" {
-                reader.seek(SeekFrom::End(seek_from_val1 as i64)).unwrap();
+                reader
+                    .seek(SeekFrom::End(-(seek_from_val1 as i64)))
+                    .unwrap();
             } else if seek_from1 == "current" {
                 reader
                     .seek(SeekFrom::Current(seek_from_val1 as i64))
@@ -842,7 +847,9 @@ fn seek_all(
             if seek_from2 == "start" {
                 reader.seek(SeekFrom::Start(seek_from_val2)).unwrap();
             } else if seek_from2 == "end" {
-                reader.seek(SeekFrom::End(seek_from_val2 as i64)).unwrap();
+                reader
+                    .seek(SeekFrom::End(-(seek_from_val2 as i64)))
+                    .unwrap();
             } else if seek_from2 == "current" {
                 reader
                     .seek(SeekFrom::Current(-(seek_from_val2 as i64)))
