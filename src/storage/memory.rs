@@ -58,7 +58,8 @@ impl Read for MemoryStorage {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let inner = self.inner.read();
 
-        let available_len = (inner.len() - self.position).min(self.written.load(Ordering::SeqCst));
+        let available_len =
+            (inner.len().saturating_sub(self.position)).min(self.written.load(Ordering::SeqCst));
         let read_len = available_len.min(buf.len());
         buf[..read_len].copy_from_slice(&inner[self.position..self.position + read_len]);
         self.position += read_len;

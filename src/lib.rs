@@ -429,7 +429,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             SeekFrom::End(position) => {
                 debug!(seek_position = position, "seeking from end");
                 if let Some(length) = self.handle.content_length() {
-                    (length as i64 - position) as u64
+                    (length as i64 + position) as u64
                 } else {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
