@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - chore/repo-token
 
 jobs:
   release-plz:
