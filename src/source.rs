@@ -5,8 +5,8 @@ use std::fmt::Debug;
 use std::future;
 use std::io::{self, SeekFrom};
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::Instant;
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -15,7 +15,7 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
 use tap::TapFallible;
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{Notify, mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -516,18 +516,15 @@ where
         download_start: Instant,
         chunk_size: usize,
     ) {
-        self.report_progress(
-            stream,
-            StreamState {
-                current_position: stream_position,
-                current_chunk: (0..stream_position),
-                elapsed: download_start.elapsed(),
-                phase: StreamPhase::Prefetching {
-                    target: self.prefetch_bytes,
-                    chunk_size,
-                },
+        self.report_progress(stream, StreamState {
+            current_position: stream_position,
+            current_chunk: (0..stream_position),
+            elapsed: download_start.elapsed(),
+            phase: StreamPhase::Prefetching {
+                target: self.prefetch_bytes,
+                chunk_size,
             },
-        );
+        });
     }
 
     fn report_downloading_progress(
@@ -538,32 +535,26 @@ where
         chunk_size: usize,
     ) -> io::Result<()> {
         let pos = self.writer.stream_position()?;
-        self.report_progress(
-            stream,
-            StreamState {
-                current_position: pos,
-                current_chunk: self
-                    .downloaded
-                    .get(new_position - 1)
-                    .expect("position already downloaded"),
-                elapsed: download_start.elapsed(),
-                phase: StreamPhase::Downloading { chunk_size },
-            },
-        );
+        self.report_progress(stream, StreamState {
+            current_position: pos,
+            current_chunk: self
+                .downloaded
+                .get(new_position - 1)
+                .expect("position already downloaded"),
+            elapsed: download_start.elapsed(),
+            phase: StreamPhase::Downloading { chunk_size },
+        });
         Ok(())
     }
 
     fn report_download_complete(&mut self, stream: &S, download_start: Instant) -> io::Result<()> {
         let pos = self.writer.stream_position()?;
-        self.report_progress(
-            stream,
-            StreamState {
-                current_position: pos,
-                elapsed: download_start.elapsed(),
-                current_chunk: self.downloaded.get(pos - 1).expect(""),
-                phase: StreamPhase::Complete,
-            },
-        );
+        self.report_progress(stream, StreamState {
+            current_position: pos,
+            elapsed: download_start.elapsed(),
+            current_chunk: self.downloaded.get(pos - 1).expect(""),
+            phase: StreamPhase::Complete,
+        });
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use aws_sdk_s3 as s3;
 use aws_sdk_s3::config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use opendal::layers::LoggingLayer;
-use opendal::{services, Operator};
+use opendal::{Operator, services};
 use stream_download::open_dal::OpenDalStreamParams;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};

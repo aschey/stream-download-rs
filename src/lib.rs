@@ -123,9 +123,9 @@ impl<S> Settings<S> {
     ///
     /// ```
     /// use reqwest::Client;
+    /// use stream_download::Settings;
     /// use stream_download::http::HttpStream;
     /// use stream_download::source::SourceStream;
-    /// use stream_download::Settings;
     ///
     /// let settings = Settings::default();
     /// settings.on_progress(|stream: &HttpStream<Client>, state| {
@@ -228,7 +228,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     /// use std::io::{self, Read};
     /// use std::result::Result;
     ///
-    /// use opendal::{services, Operator};
+    /// use opendal::{Operator, services};
     /// use stream_download::open_dal::OpenDalStreamParams;
     /// use stream_download::storage::temp::TempStorageProvider;
     /// use stream_download::{Settings, StreamDownload};

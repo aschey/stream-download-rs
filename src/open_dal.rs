@@ -7,7 +7,7 @@
 //! ```no_run
 //! use std::error::Error;
 //!
-//! use opendal::{services, Operator};
+//! use opendal::{Operator, services};
 //! use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
 //! use stream_download::storage::temp::TempStorageProvider;
 //! use stream_download::{Settings, StreamDownload};
@@ -34,15 +34,15 @@ use std::num::NonZeroUsize;
 use std::task::Poll;
 
 use bytes::{Bytes, BytesMut};
-use futures::{ready, Stream};
+use futures::{Stream, ready};
 use opendal::{FuturesAsyncReader, Metakey, Operator, Reader};
 use pin_project_lite::pin_project;
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
 use tokio_util::io::poll_read_buf;
 use tracing::instrument;
 
-use crate::source::{DecodeError, SourceStream};
 use crate::WrapIoResult;
+use crate::source::{DecodeError, SourceStream};
 
 /// Parameters for creating an `OpenDAL` stream.
 #[derive(Debug, Clone)]

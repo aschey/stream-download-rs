@@ -72,7 +72,7 @@ impl TempStorageProvider {
     /// # Example
     ///
     /// ```no_run
-    /// use stream_download::storage::temp::{tempfile, TempStorageProvider};
+    /// use stream_download::storage::temp::{TempStorageProvider, tempfile};
     ///
     /// TempStorageProvider::with_tempfile_builder(|| {
     ///     tempfile::Builder::new().suffix("testfile").tempfile()
