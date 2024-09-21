@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::time::Instant;
 
-use stream_download::http::{format_range_header_bytes, Client, HttpStream, RANGE_HEADER_KEY};
+use stream_download::http::{Client, HttpStream, RANGE_HEADER_KEY, format_range_header_bytes};
 use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};

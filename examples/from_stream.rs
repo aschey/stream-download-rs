@@ -1,7 +1,7 @@
 use std::error::Error;
 
-use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
+use stream_download::http::reqwest::Client;
 use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};

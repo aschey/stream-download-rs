@@ -12,8 +12,8 @@
 //! use std::error::Error;
 //! use std::result::Result;
 //!
-//! use stream_download::http::reqwest::Client;
 //! use stream_download::http::HttpStream;
+//! use stream_download::http::reqwest::Client;
 //! use stream_download::source::SourceStream;
 //!
 //! #[tokio::main]
@@ -43,8 +43,8 @@ use mediatype::MediaTypeBuf;
 pub use reqwest;
 use tracing::{debug, instrument, warn};
 
-use crate::source::{DecodeError, SourceStream};
 use crate::WrapIoResult;
+use crate::source::{DecodeError, SourceStream};
 
 #[cfg(feature = "reqwest")]
 pub mod reqwest_client;

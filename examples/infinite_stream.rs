@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::num::NonZeroUsize;
 
-use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
+use stream_download::http::reqwest::Client;
 use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;

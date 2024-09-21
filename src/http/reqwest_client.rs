@@ -9,7 +9,7 @@ use reqwest::header::{self, AsHeaderName, HeaderMap};
 use tap::TapFallible;
 use tracing::warn;
 
-use super::{format_range_header_bytes, DecodeError, RANGE_HEADER_KEY};
+use super::{DecodeError, RANGE_HEADER_KEY, format_range_header_bytes};
 use crate::http::{Client, ClientResponse, ResponseHeaders};
 
 impl ResponseHeaders for HeaderMap {

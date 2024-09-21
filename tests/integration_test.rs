@@ -9,18 +9,18 @@ mod setup;
 
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use opendal::{services, Operator};
+use opendal::{Operator, services};
 use rstest::rstest;
 use setup::{SERVER_ADDR, SERVER_RT};
 use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
 use stream_download::source::{DecodeError, SourceStream};
+use stream_download::storage::StorageProvider;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
-use stream_download::storage::StorageProvider;
-use stream_download::{http, Settings, StreamDownload, StreamInitializationError};
+use stream_download::{Settings, StreamDownload, StreamInitializationError, http};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::spawn_blocking;
 
