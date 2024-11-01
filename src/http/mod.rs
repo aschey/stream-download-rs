@@ -262,6 +262,13 @@ impl<C: Client> HttpStream<C> {
     pub fn headers(&self) -> &C::Headers {
         &self.headers
     }
+
+    fn supports_range_request(&self) -> bool {
+        match self.header("Accept-Ranges") {
+            Some(val) => val != "none",
+            None => false,
+        }
+    }
 }
 
 impl<C: Client> Stream for HttpStream<C> {
@@ -294,6 +301,14 @@ impl<C: Client> SourceStream for HttpStream<C> {
             self.stream = Box::new(futures::stream::empty());
             return Ok(());
         }
+
+        if !self.supports_range_request() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "stream does not support range requests",
+            ));
+        }
+
         debug!("sending HTTP range request");
         let request_start = Instant::now();
         let response = self
@@ -320,6 +335,21 @@ impl<C: Client> SourceStream for HttpStream<C> {
         self.stream = Box::new(response.stream());
         debug!("done seeking");
         Ok(())
+    }
+
+    async fn reconnect(&mut self, current_position: u64) -> Result<(), io::Error> {
+        if self.supports_range_request() {
+            self.seek_range(current_position, None).await
+        } else {
+            let response = self
+                .client
+                .get(&self.url)
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+                .wrap_err(&format!("error sending HTTP request to {}", self.url))?;
+            self.stream = Box::new(response.stream());
+            Ok(())
+        }
     }
 }
 

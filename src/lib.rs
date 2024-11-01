@@ -76,6 +76,7 @@ type CallbackFn<S> = Box<dyn FnMut(&S, StreamState) + Send + Sync>;
 pub struct Settings<S> {
     prefetch_bytes: u64,
     seek_buffer_size: usize,
+    retry_timeout: Duration,
     #[educe(Debug = false, PartialEq = false)]
     on_progress: Option<CallbackFn<S>>,
 }
@@ -85,6 +86,7 @@ impl<S> Default for Settings<S> {
         Self {
             prefetch_bytes: 256 * 1024,
             seek_buffer_size: 128,
+            retry_timeout: Duration::from_secs(5),
             on_progress: None,
         }
     }
@@ -113,6 +115,22 @@ impl<S> Settings<S> {
     pub fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
         Self {
             seek_buffer_size,
+            ..self
+        }
+    }
+
+    /// If there is no new data for a duration greater than this timeout, we will attempt to
+    /// reconnect to the server.
+    ///  
+    /// This timeout is designed to help streams recover during temporary network failures,
+    /// but you may need to increase this if you're seeing warnings about timeouts in the logs
+    /// under normal network conditions.
+    ///
+    /// The default value is 5 seconds.
+    #[must_use]
+    pub fn retry_timeout(self, retry_timeout: Duration) -> Self {
+        Self {
+            retry_timeout,
             ..self
         }
     }
