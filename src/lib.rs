@@ -70,7 +70,9 @@ pub struct StreamState {
     pub current_chunk: Range<u64>,
 }
 
-type CallbackFn<S> = Box<dyn FnMut(&S, StreamState, &CancellationToken) + Send + Sync>;
+type ProgressFn<S> = Box<dyn FnMut(&S, StreamState, &CancellationToken) + Send + Sync>;
+
+type ReconnectFn<S> = Box<dyn FnMut(&S, &CancellationToken) + Send + Sync>;
 
 /// Settings to configure the stream behavior.
 #[derive(Educe)]
@@ -80,7 +82,9 @@ pub struct Settings<S> {
     seek_buffer_size: usize,
     retry_timeout: Duration,
     #[educe(Debug = false, PartialEq = false)]
-    on_progress: Option<CallbackFn<S>>,
+    on_progress: Option<ProgressFn<S>>,
+    #[educe(Debug = false, PartialEq = false)]
+    on_reconnect: Option<ReconnectFn<S>>,
 }
 
 impl<S> Default for Settings<S> {
@@ -90,6 +94,7 @@ impl<S> Default for Settings<S> {
             seek_buffer_size: 128,
             retry_timeout: Duration::from_secs(5),
             on_progress: None,
+            on_reconnect: None,
         }
     }
 }
@@ -160,6 +165,16 @@ impl<S> Settings<S> {
         F: FnMut(&S, StreamState, &CancellationToken) + Send + Sync + 'static,
     {
         self.on_progress = Some(Box::new(f));
+        self
+    }
+
+    /// Attach a callback function that will be called when the stream reconnects after a failure.
+    /// The provided [`CancellationToken`] can be used to immediately cancel the stream.
+    pub fn on_reconnect<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&S, &CancellationToken) + Send + Sync + 'static,
+    {
+        self.on_reconnect = Some(Box::new(f));
         self
     }
 
@@ -424,6 +439,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         let cancellation_token = CancellationToken::new();
         let mut source = Source::new(writer, content_length, settings, cancellation_token.clone());
         let handle = source.source_handle();
+
         let download_status = DownloadStatus::default();
         tokio::spawn({
             let download_status = download_status.clone();

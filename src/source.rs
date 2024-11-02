@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::storage::StorageWriter;
-use crate::{CallbackFn, Settings, StreamPhase, StreamState};
+use crate::{ProgressFn, ReconnectFn, Settings, StreamPhase, StreamState};
 
 /// Represents a remote resource that can be streamed over the network. Streaming
 /// over http is implemented via the [`HttpStream`](crate::http::HttpStream)
@@ -258,7 +258,8 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     seek_rx: mpsc::Receiver<u64>,
     prefetch_bytes: u64,
     retry_timeout: Duration,
-    on_progress: Option<CallbackFn<S>>,
+    on_progress: Option<ProgressFn<S>>,
+    on_reconnect: Option<ReconnectFn<S>>,
     prefetch_complete: bool,
     prefetch_start_position: u64,
     remaining_bytes: Option<Bytes>,
@@ -289,6 +290,7 @@ where
             prefetch_bytes: settings.prefetch_bytes,
             retry_timeout: settings.retry_timeout,
             on_progress: settings.on_progress,
+            on_reconnect: settings.on_reconnect,
             prefetch_start_position: 0,
             remaining_bytes: None,
             cancellation_token,
@@ -306,33 +308,11 @@ where
             let next_chunk = timeout(self.retry_timeout, stream.next());
             tokio::select! {
                 position = self.seek_rx.recv() => {
-                    let position = position.expect("seek_tx dropped");
-                    if self.should_seek(position)? {
-                        debug!("seek position not yet downloaded");
-
-                        if self.prefetch_complete {
-                            debug!("re-starting prefetch");
-                            self.prefetch_start_position = position;
-                            self.prefetch_complete = false;
-                        }
-                        else {
-                            debug!("seeking during prefetch, ending prefetch early");
-                            self.downloaded
-                                .add(self.prefetch_start_position..self.writer.stream_position()?);
-                            self.prefetch_complete = true;
-                        }
-                        self.seek(&mut stream, position, None).await?;
-                    }
-                    continue
+                    self.handle_seek(&mut stream, &position).await?;
                 },
                 bytes = next_chunk => {
                     let Ok(bytes) = bytes else {
-                        warn!("timed out reading next chunk, retrying");
-                        let pos = self.writer.stream_position()?;
-                        let _ = stream
-                            .reconnect(pos)
-                            .await
-                            .tap_err(|e| warn!("error attempting to reconnect: {e:?}"));
+                        self.handle_reconnect(&mut stream).await?;
                         continue;
                     };
                     if self
@@ -354,6 +334,42 @@ where
             };
         }
         self.report_download_complete(&stream, download_start)?;
+        Ok(())
+    }
+
+    async fn handle_seek(&mut self, stream: &mut S, position: &Option<u64>) -> io::Result<()> {
+        let position = position.expect("seek_tx dropped");
+        if self.should_seek(position)? {
+            debug!("seek position not yet downloaded");
+
+            if self.prefetch_complete {
+                debug!("re-starting prefetch");
+                self.prefetch_start_position = position;
+                self.prefetch_complete = false;
+            } else {
+                debug!("seeking during prefetch, ending prefetch early");
+                self.downloaded
+                    .add(self.prefetch_start_position..self.writer.stream_position()?);
+                self.prefetch_complete = true;
+            }
+            self.seek(stream, position, None).await?;
+        }
+        Ok(())
+    }
+
+    async fn handle_reconnect(&mut self, stream: &mut S) -> io::Result<()> {
+        warn!("timed out reading next chunk, retrying");
+        let pos = self.writer.stream_position()?;
+        if stream
+            .reconnect(pos)
+            .await
+            .tap_err(|e| warn!("error attempting to reconnect: {e:?}"))
+            .is_ok()
+        {
+            if let Some(on_reconnect) = &mut self.on_reconnect {
+                on_reconnect(stream, &self.cancellation_token);
+            }
+        }
         Ok(())
     }
 
