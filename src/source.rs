@@ -262,13 +262,19 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     prefetch_complete: bool,
     prefetch_start_position: u64,
     remaining_bytes: Option<Bytes>,
+    cancellation_token: CancellationToken,
 }
 
 impl<S: SourceStream, H: StorageWriter> Source<S, H>
 where
     S::Error: Debug,
 {
-    pub(crate) fn new(writer: H, content_length: Option<u64>, settings: Settings<S>) -> Self {
+    pub(crate) fn new(
+        writer: H,
+        content_length: Option<u64>,
+        settings: Settings<S>,
+        cancellation_token: CancellationToken,
+    ) -> Self {
         let (seek_tx, seek_rx) = mpsc::channel(settings.seek_buffer_size);
         Self {
             writer,
@@ -285,15 +291,12 @@ where
             on_progress: settings.on_progress,
             prefetch_start_position: 0,
             remaining_bytes: None,
+            cancellation_token,
         }
     }
 
     #[instrument(skip_all)]
-    pub(crate) async fn download(
-        &mut self,
-        mut stream: S,
-        cancellation_token: CancellationToken,
-    ) -> io::Result<()> {
+    pub(crate) async fn download(&mut self, mut stream: S) -> io::Result<()> {
         debug!("starting file download");
         let download_start = std::time::Instant::now();
 
@@ -344,7 +347,7 @@ where
                         break;
                     }
                 }
-                () = cancellation_token.cancelled() => {
+                () = self.cancellation_token.cancelled() => {
                     debug!("received cancellation request, stopping download task");
                     return Err(io::Error::new(io::ErrorKind::Interrupted, "stream cancelled by user"));
                 }
@@ -527,7 +530,7 @@ where
 
     fn report_progress(&mut self, stream: &S, info: StreamState) {
         if let Some(on_progress) = self.on_progress.as_mut() {
-            on_progress(stream, info);
+            on_progress(stream, info, &self.cancellation_token);
         }
     }
 
