@@ -1,4 +1,4 @@
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -18,7 +18,7 @@ use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::StorageProvider;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
-use stream_download::storage::memory::MemoryStorageProvider;
+use stream_download::storage::memory::{MemoryStorage, MemoryStorageProvider};
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload, StreamInitializationError, http};
 use tokio::sync::{mpsc, oneshot};
@@ -200,6 +200,40 @@ impl http::ClientResponse for TestResponse {
             state: StreamState::Ready,
             total_size: 0,
         })
+    }
+}
+
+#[derive(Clone)]
+struct ErrorTestStorageProvider(MemoryStorageProvider);
+
+struct ErrorTestStorage(MemoryStorage);
+
+impl Write for ErrorTestStorage {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        Err(io::Error::new(io::ErrorKind::Other, "test error"))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl Seek for ErrorTestStorage {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.0.seek(pos)
+    }
+}
+
+impl StorageProvider for ErrorTestStorageProvider {
+    type Reader = MemoryStorage;
+    type Writer = ErrorTestStorage;
+
+    fn into_reader_writer(
+        self,
+        content_length: Option<u64>,
+    ) -> io::Result<(Self::Reader, Self::Writer)> {
+        let (reader, writer) = self.0.into_reader_writer(content_length)?;
+        Ok((reader, ErrorTestStorage(writer)))
     }
 }
 
@@ -434,6 +468,29 @@ fn tempfile_builder(
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
             compare(get_file_buf(), buf);
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[test]
+fn return_error() {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            ErrorTestStorageProvider(MemoryStorageProvider),
+            Settings::default(),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            let res = reader.read_to_end(&mut buf);
+            assert!(res.is_err());
         })
         .await
         .unwrap();
