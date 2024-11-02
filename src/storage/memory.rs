@@ -46,7 +46,7 @@ impl StorageProvider for MemoryStorageProvider {
     }
 }
 
-/// Simple threadsafe in-memory buffer that supports the standard IO traits.
+/// Simple thread-safe in-memory buffer that supports the standard IO traits.
 #[derive(Debug)]
 pub struct MemoryStorage {
     inner: Arc<RwLock<Vec<u8>>>,

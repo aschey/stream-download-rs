@@ -24,9 +24,10 @@ rangemap = "1"
 reqwest = { version = "0.12.2", features = [
   "stream",
 ], default-features = false, optional = true }
+reqwest-middleware = { version = "0.3", optional = true }
 tap = "1.0.1"
 tempfile = { version = "3.1", optional = true }
-thiserror = "1.0.2"
+thiserror = "1.0.21"
 tokio = { version = "1.27", features = ["sync", "macros", "rt", "time"] }
 tokio-util = "0.7.1"
 tracing = "0.1.36"
@@ -37,6 +38,7 @@ http = ["dep:mediatype"]
 reqwest = ["http", "dep:reqwest"]
 reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
 reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
+reqwest-middleware = ["reqwest", "dep:reqwest-middleware"]
 temp-storage = ["dep:tempfile"]
 open-dal = ["dep:opendal", "dep:pin-project-lite", "tokio-util/compat"]
 
@@ -55,6 +57,7 @@ axum = "0.7.5"
 testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
 opendal = { version = "0.50.0", features = ["services-s3", "services-http"] }
 aws-sdk-s3 = "1.29.0"
+reqwest-retry = "0.6.1"
 
 [[example]]
 name = "basic_http"
@@ -89,6 +92,11 @@ doc-scrape-examples = true
 [[example]]
 name = "memory_storage"
 required-features = ["reqwest"]
+doc-scrape-examples = true
+
+[[example]]
+name = "retry_middleware"
+required-features = ["reqwest-middleware"]
 doc-scrape-examples = true
 
 [[example]]

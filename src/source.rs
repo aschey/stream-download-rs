@@ -360,9 +360,11 @@ where
     async fn handle_reconnect(&mut self, stream: &mut S) -> io::Result<()> {
         warn!("timed out reading next chunk, retrying");
         let pos = self.writer.stream_position()?;
-        if stream
-            .reconnect(pos)
-            .await
+        // We already know there's a network issue if we're attempting a reconnect.
+        // A retry policy on the client may cause an exponential backoff to be triggered here, so
+        // we'll cap the reconnect time to prevent additional delays between reconnect attempts.
+        let reconnect_pos = tokio::time::timeout(self.retry_timeout, stream.reconnect(pos)).await;
+        if reconnect_pos
             .tap_err(|e| warn!("error attempting to reconnect: {e:?}"))
             .is_ok()
         {

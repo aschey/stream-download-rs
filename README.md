@@ -9,12 +9,18 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/aschey/stream-download-rs)
 ![Lines of Code](https://aschey.tech/tokei/github/aschey/stream-download-rs)
 
-[stream-download](https://github.com/aschey/stream-download-rs) is a library for streaming content from a remote location to a local cache and using it as a [`read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and [`seek`](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
-The requested content is downloaded in the background and read or seek operations are allowed before the download is finished.
-Seek operations may cause the stream to be restarted from the requested position if the download is still in progress.
-This is useful for media applications that need to stream large files that may take a long time to download.
+[stream-download](https://github.com/aschey/stream-download-rs) is a library for
+streaming content from a remote location to a local cache and using it as a
+[`read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and
+[`seek`](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
+The requested content is downloaded in the background and read or seek
+operations are allowed before the download is finished. Seek operations may
+cause the stream to be restarted from the requested position if the download is
+still in progress. This is useful for media applications that need to stream
+large files that may take a long time to download.
 
-This library makes heavy use of the adapter pattern to allow for pluggable transports and storage implementations.
+This library makes heavy use of the adapter pattern to allow for pluggable
+transports and storage implementations.
 
 ## Installation
 
@@ -24,14 +30,26 @@ cargo add stream-download
 
 ## Features
 
-- `http` - adds an HTTP-based implementation of the [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait (enabled by default).
-- `reqwest` - enables streaming content over http using [reqwest](https://crates.io/crates/reqwest) (enabled by default).
-- `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables the `reqwest` feature.
-- `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the `reqwest` feature.
-- `open-dal` - adds a `SourceStream` implementation that uses [Apache OpenDAL](https://crates.io/crates/opendal) as the backend.
-- `temp-storage` - adds a temporary file-based storage backend (enabled by default).
+- `http` - adds an HTTP-based implementation of the
+  [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html)
+  trait (enabled by default).
+- `reqwest` - enables streaming content over http using
+  [reqwest](https://crates.io/crates/reqwest) (enabled by default).
+- `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables
+  the `reqwest` feature.
+- `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the
+  `reqwest` feature.
+- `reqwest-middleware` - enables integration with
+  [`reqwest-middleware`](https://crates.io/crates/reqwest-middleware). Can be
+  used to add retry policies and additional observability. Also enables the
+  `reqwest` feature.
+- `open-dal` - adds a `SourceStream` implementation that uses
+  [Apache OpenDAL](https://crates.io/crates/opendal) as the backend.
+- `temp-storage` - adds a temporary file-based storage backend (enabled by
+  default).
 
-One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use https streams.
+One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use
+https streams.
 
 ## Usage
 
@@ -75,18 +93,26 @@ See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
 
 ## Transports
 
-Transports implement the [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html) trait.
-Two types of transports are provided out of the box - [`http`](https://docs.rs/stream-download/latest/stream_download/http) for typical HTTP-based sources and [`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal) which is more complex, but supports a large variety of services.
+Transports implement the
+[`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html)
+trait. Two types of transports are provided out of the box -
+[`http`](https://docs.rs/stream-download/latest/stream_download/http) for
+typical HTTP-based sources and
+[`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal)
+which is more complex, but supports a large variety of services.
 
-Only `http` is enabled by default.
-You can provide a custom transport by implementing `SourceStream` yourself.
+Only `http` is enabled by default. You can provide a custom transport by
+implementing `SourceStream` yourself.
 
 ## Streams with Unknown Length
 
-Resources such as standalone songs or videos have a finite length that we use to support certain seeking functionality.
-Infinite streams or those that otherwise don't have a known length are still supported, but attempting to seek from the end of the stream will return an error.
-This may cause issues with certain audio or video libraries that attempt to perform such seek operations.
-If it's necessary to explicitly check for an infinite stream, you can check the stream's content length ahead of time.
+Resources such as standalone songs or videos have a finite length that we use to
+support certain seeking functionality. Infinite streams or those that otherwise
+don't have a known length are still supported, but attempting to seek from the
+end of the stream will return an error. This may cause issues with certain audio
+or video libraries that attempt to perform such seek operations. If it's
+necessary to explicitly check for an infinite stream, you can check the stream's
+content length ahead of time.
 
 ```rust,no_run
 use std::error::Error;
@@ -133,14 +159,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ### Icecast/Shoutcast Streams
 
-If you're using this library to handle Icecast streams or one if its derivatives, check out the [icy-metadata](https://crates.io/crates/icy-metadata) crate.
-There are examples for how to use it with stream-download [in the repo](https://github.com/aschey/icy-metadata/tree/main/examples).
+If you're using this library to handle Icecast streams or one if its
+derivatives, check out the [icy-metadata](https://crates.io/crates/icy-metadata)
+crate. There are examples for how to use it with `stream-download`
+[in the repo](https://github.com/aschey/icy-metadata/tree/main/examples).
 
 ## Storage
 
-The [storage](https://docs.rs/stream-download/latest/stream_download/storage/index.html) module provides ways to customize how the stream is cached locally.
-Pre-configured implementations are available for memory and temporary file-based storage.
-Typically you'll want to use temporary file-based storage to prevent using too much memory, but memory-based storage may be preferable if you know the stream size is small or you need to run your application on a read-only filesystem.
+The
+[storage](https://docs.rs/stream-download/latest/stream_download/storage/index.html)
+module provides ways to customize how the stream is cached locally.
+Pre-configured implementations are available for memory and temporary file-based
+storage. Typically you'll want to use temporary file-based storage to prevent
+using too much memory, but memory-based storage may be preferable if you know
+the stream size is small or you need to run your application on a read-only
+filesystem.
 
 ```rust,no_run
 use std::error::Error;
@@ -171,10 +204,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ### Bounded Storage
 
-When using infinite streams which don't need to support seeking, it usually isn't desirable to let the underlying cache grow indefinitely if the stream may be running for a while.
-For these cases, you may want to use [bounded storage](https://docs.rs/stream-download/latest/stream_download/storage/bounded/index.html).
-Bounded storage uses a circular buffer which will overwrite the oldest contents once it fills up.
-If the reader falls too far behind the writer, the writer will pause so the reader can catch up.
+When using infinite streams which don't need to support seeking, it usually
+isn't desirable to let the underlying cache grow indefinitely if the stream may
+be running for a while. For these cases, you may want to use
+[bounded storage](https://docs.rs/stream-download/latest/stream_download/storage/bounded/index.html).
+Bounded storage uses a circular buffer which will overwrite the oldest contents
+once it fills up. If the reader falls too far behind the writer, the writer will
+pause so the reader can catch up.
 
 ```rust,no_run
 use std::error::Error;
@@ -213,8 +249,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ### Adaptive Storage
 
-When you need to support both finite and infinite streams, you may want to use [adaptive storage](https://docs.rs/stream-download/latest/stream_download/storage/adaptive/index.html).
-This is a convenience wrapper that will use bounded storage when the stream has no content length and unbounded storage when the stream does return a content length.
+When you need to support both finite and infinite streams, you may want to use
+[adaptive storage](https://docs.rs/stream-download/latest/stream_download/storage/adaptive/index.html).
+This is a convenience wrapper that will use bounded storage when the stream has
+no content length and unbounded storage when the stream does return a content
+length.
 
 ```rust,no_run
 use std::error::Error;
@@ -252,13 +291,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
-## Authentication and other customization
+## Handling Errors and Reconnects
 
-It's possible to customize your HTTP requests if you need to perform authentication or change other settings.
+Some automatic support is available for retrying stalled streams. See the docs
+for
+[the `StreamDownload` struct](https://docs.rs/stream-download/latest/stream_download/struct.StreamDownload.html)
+for more details.
 
-See [client_options](https://github.com/aschey/stream-download-rs/blob/main/examples/client_options.rs) for customizing the HTTP client builder.
+If using `reqwest-middleware`, a retry policy can be used to handle transient
+server errors. See
+[retry_middleware](https://github.com/aschey/stream-download-rs/blob/main/examples/retry_middleware.rs)
+for an example of adding retry middleware.
 
-See [custom_client](https://github.com/aschey/stream-download-rs/blob/main/examples/custom_client.rs) for dynamically modifying each HTTP request.
+## Authentication and Other Customization
+
+It's possible to customize your HTTP requests if you need to perform
+authentication or change other settings.
+
+See
+[client_options](https://github.com/aschey/stream-download-rs/blob/main/examples/client_options.rs)
+for customizing the HTTP client builder.
+
+See
+[custom_client](https://github.com/aschey/stream-download-rs/blob/main/examples/custom_client.rs)
+for dynamically modifying each HTTP request.
 
 ## Supported Rust Versions
 
