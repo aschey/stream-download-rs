@@ -346,9 +346,7 @@ where
                 }
                 () = cancellation_token.cancelled() => {
                     debug!("received cancellation request, stopping download task");
-                    self.writer.flush()?;
-                    self.signal_download_complete();
-                    break;
+                    return Err(io::Error::new(io::ErrorKind::Interrupted, "stream cancelled by user"));
                 }
             };
         }
