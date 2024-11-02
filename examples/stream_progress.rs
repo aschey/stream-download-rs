@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::sync::RwLock;
 use std::time::Instant;
 
 use stream_download::http::HttpStream;
@@ -22,17 +21,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
-    let last_event = RwLock::new(Instant::now());
+    let mut last_event = Instant::now();
     let reader = match StreamDownload::new_http(
         "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
          No 6 - Movement 2 Un poco andante.MP3"
             .parse()?,
         TempStorageProvider::new(),
-        Settings::default().on_progress(move |stream: &HttpStream<_>, state| {
+        Settings::default().on_progress(move |stream: &HttpStream<_>, state, _| {
             let now = Instant::now();
-            let mut last_event = last_event.write().unwrap();
-            let elapsed = now - *last_event;
-            *last_event = now;
+            let elapsed = now - last_event;
+            last_event = now;
             match state.phase {
                 StreamPhase::Prefetching {
                     target, chunk_size, ..

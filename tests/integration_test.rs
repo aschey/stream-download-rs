@@ -1127,7 +1127,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
             TempStorageProvider::default(),
             Settings::default()
                 .prefetch_bytes(prefetch_bytes)
-                .on_progress(move |stream: &HttpStream<_>, info| {
+                .on_progress(move |stream: &HttpStream<_>, info, _| {
                     let _ = tx.send((stream.content_length(), info));
                 }),
         )
@@ -1181,7 +1181,7 @@ fn on_progress_no_prefetch() {
                 .unwrap(),
             TempStorageProvider::default(),
             Settings::default().prefetch_bytes(0).on_progress(
-                move |stream: &HttpStream<_>, info| {
+                move |stream: &HttpStream<_>, info, _| {
                     let _ = tx.send((stream.content_length(), info));
                 },
             ),
@@ -1238,7 +1238,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
             TempStorageProvider::default(),
             Settings::default()
                 .prefetch_bytes(prefetch_bytes)
-                .on_progress(move |stream: &HttpStream<_>, info| {
+                .on_progress(move |stream: &HttpStream<_>, info, _| {
                     let _ = tx.send((stream.content_length(), info));
                 }),
         )

@@ -70,7 +70,7 @@ pub struct StreamState {
     pub current_chunk: Range<u64>,
 }
 
-type CallbackFn<S> = Box<dyn FnMut(&S, StreamState) + Send + Sync>;
+type CallbackFn<S> = Box<dyn FnMut(&S, StreamState, &CancellationToken) + Send + Sync>;
 
 /// Settings to configure the stream behavior.
 #[derive(Educe)]
@@ -138,6 +138,7 @@ impl<S> Settings<S> {
     }
 
     /// Attach a callback function that will be called when a new chunk of the stream is processed.
+    /// The provided [`CancellationToken`] can be used to immediately cancel the stream.
     ///
     /// # Example
     ///
@@ -148,7 +149,7 @@ impl<S> Settings<S> {
     /// use stream_download::source::SourceStream;
     ///
     /// let settings = Settings::default();
-    /// settings.on_progress(|stream: &HttpStream<Client>, state| {
+    /// settings.on_progress(|stream: &HttpStream<Client>, state, _| {
     ///     let progress = state.current_position as f32 / stream.content_length().unwrap() as f32;
     ///     println!("progress: {}%", progress * 100.0);
     /// });
@@ -156,7 +157,7 @@ impl<S> Settings<S> {
     #[must_use]
     pub fn on_progress<F>(mut self, f: F) -> Self
     where
-        F: Fn(&S, StreamState) + Send + Sync + 'static,
+        F: FnMut(&S, StreamState, &CancellationToken) + Send + Sync + 'static,
     {
         self.on_progress = Some(Box::new(f));
         self
@@ -420,17 +421,15 @@ impl<P: StorageProvider> StreamDownload<P> {
         let (reader, writer) = storage_provider
             .into_reader_writer(content_length)
             .map_err(StreamInitializationError::StorageCreationFailure)?;
-        let mut source = Source::new(writer, content_length, settings);
-        let handle = source.source_handle();
         let cancellation_token = CancellationToken::new();
-
+        let mut source = Source::new(writer, content_length, settings, cancellation_token.clone());
+        let handle = source.source_handle();
         let download_status = DownloadStatus::default();
         tokio::spawn({
             let download_status = download_status.clone();
-            let cancellation_token = cancellation_token.clone();
             async move {
                 if source
-                    .download(stream, cancellation_token)
+                    .download(stream)
                     .await
                     .tap_err(|e| error!("Error downloading stream: {e}"))
                     .is_err()
