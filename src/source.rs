@@ -290,7 +290,7 @@ where
 
     #[instrument(skip_all)]
     pub(crate) async fn download(
-        mut self,
+        &mut self,
         mut stream: S,
         cancellation_token: CancellationToken,
     ) -> io::Result<()> {
@@ -523,7 +523,7 @@ where
         self.downloaded.next_gap(&range)
     }
 
-    fn signal_download_complete(&self) {
+    pub(crate) fn signal_download_complete(&self) {
         self.position_reached.notify_stream_done();
     }
 

@@ -420,7 +420,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         let (reader, writer) = storage_provider
             .into_reader_writer(content_length)
             .map_err(StreamInitializationError::StorageCreationFailure)?;
-        let source = Source::new(writer, content_length, settings);
+        let mut source = Source::new(writer, content_length, settings);
         let handle = source.source_handle();
         let cancellation_token = CancellationToken::new();
 
@@ -436,6 +436,7 @@ impl<P: StorageProvider> StreamDownload<P> {
                     .is_err()
                 {
                     download_status.set_failed();
+                    source.signal_download_complete();
                 }
                 debug!("download task finished");
             }
@@ -554,6 +555,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
         );
         self.handle.notify_waiting();
         self.handle.wait_for_requested_position();
+        self.check_for_failure()?;
         debug!(
             current_position = stream_position,
             requested_position = requested_position,
@@ -594,6 +596,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
             "waiting for requested position"
         );
         self.handle.wait_for_requested_position();
+        self.check_for_failure()?;
         debug!("reached seek position");
 
         self.output_reader
