@@ -168,6 +168,10 @@ impl SourceStream for OpenDalStream {
             .compat();
         Ok(())
     }
+
+    async fn reconnect(&mut self, current_position: u64) -> io::Result<()> {
+        self.seek_range(current_position, None).await
+    }
 }
 
 impl Stream for OpenDalStream {

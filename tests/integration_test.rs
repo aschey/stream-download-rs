@@ -1,6 +1,8 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fs, io};
@@ -45,58 +47,56 @@ struct TestResponse {
     has_content_length: bool,
 }
 
-enum StreamState {
-    Ready,
-    Waiting,
-}
-
 struct TestStream {
     inner: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + Sync>,
     tx: mpsc::UnboundedSender<(Command, oneshot::Sender<Duration>)>,
     total_size: usize,
-    state: StreamState,
+    waiting: Arc<AtomicBool>,
+    pending: bool,
 }
 
 impl Stream for TestStream {
     type Item = Result<Bytes, reqwest::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.state {
-            StreamState::Ready => {
-                let (tx, rx) = oneshot::channel();
-                self.tx
-                    .send((Command::NextChunk(self.total_size), tx))
-                    .unwrap();
-                let waker = cx.waker().clone();
-                self.state = StreamState::Waiting;
-
-                tokio::spawn(async move {
-                    tokio::time::sleep(rx.await.unwrap()).await;
-                    waker.wake();
-                });
-                Poll::Pending
+        if self.waiting.load(Ordering::SeqCst) {
+            if self.pending {
+                return Poll::Pending;
             }
-            StreamState::Waiting => {
-                self.state = StreamState::Ready;
-                let mut this = Pin::new(self);
-                let res = this.inner.poll_next_unpin(cx);
+            let (tx, rx) = oneshot::channel();
+            self.tx
+                .send((Command::NextChunk(self.total_size), tx))
+                .unwrap();
+            let waker = cx.waker().clone();
+            let waiting = self.waiting.clone();
+            self.pending = true;
+            tokio::spawn(async move {
+                tokio::time::sleep(rx.await.unwrap()).await;
+                waiting.store(false, Ordering::SeqCst);
+                waker.wake();
+            });
+            Poll::Pending
+        } else {
+            self.waiting.store(true, Ordering::SeqCst);
+            self.pending = false;
+            let mut this = Pin::new(self);
+            let res = this.inner.poll_next_unpin(cx);
 
-                match &res {
-                    Poll::Ready(None) => {
+            match &res {
+                Poll::Ready(None) => {
+                    let (tx, _rx) = oneshot::channel();
+                    this.tx.send((Command::EndStream, tx)).unwrap();
+                }
+                Poll::Ready(Some(Ok(res))) => {
+                    this.total_size += res.len();
+                    if res.is_empty() {
                         let (tx, _rx) = oneshot::channel();
                         this.tx.send((Command::EndStream, tx)).unwrap();
                     }
-                    Poll::Ready(Some(Ok(res))) => {
-                        this.total_size += res.len();
-                        if res.is_empty() {
-                            let (tx, _rx) = oneshot::channel();
-                            this.tx.send((Command::EndStream, tx)).unwrap();
-                        }
-                    }
-                    _ => {}
-                };
-                res
-            }
+                }
+                _ => {}
+            };
+            res
         }
     }
 }
@@ -195,9 +195,10 @@ impl http::ClientResponse for TestResponse {
         self,
     ) -> Box<dyn Stream<Item = Result<Bytes, Self::StreamError>> + Unpin + Send + Sync> {
         Box::new(TestStream {
+            pending: false,
             tx: self.tx.clone(),
             inner: self.inner.stream(),
-            state: StreamState::Ready,
+            waiting: Arc::new(AtomicBool::new(true)),
             total_size: 0,
         })
     }
@@ -533,6 +534,75 @@ fn slow_download(
             .unwrap(),
             storage,
             Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+            compare(get_file_buf(), buf);
+        })
+        .await
+        .unwrap();
+
+        handle.await.unwrap();
+    });
+}
+
+#[rstest]
+fn retry_stuck_download(
+    #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
+    + 'static,
+) {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
+
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let (command, responder) = rx.recv().await.unwrap();
+            assert_eq!(Command::GetUrl, command);
+            responder.send(Duration::from_millis(50)).unwrap();
+
+            let mut retry_done = false;
+            let mut waiting_for_seek = false;
+            let mut got_seek = false;
+            while let Some((command, responder)) = rx.recv().await {
+                if command == Command::EndStream {
+                    assert!(got_seek);
+                    return;
+                }
+                if waiting_for_seek && matches!(command, Command::GetRange) {
+                    waiting_for_seek = false;
+                    got_seek = true;
+                } else {
+                    assert!(matches!(command, Command::NextChunk(_)));
+                }
+                if retry_done {
+                    responder.send(Duration::from_millis(50)).unwrap();
+                } else {
+                    responder.send(Duration::from_millis(200)).unwrap();
+                    retry_done = true;
+                    waiting_for_seek = true;
+                }
+            }
+            panic!("Stream not finished");
+        });
+
+        let mut reader = StreamDownload::from_stream(
+            http::HttpStream::new(
+                TestClient::new(tx, true),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+            storage,
+            Settings::default()
+                .prefetch_bytes(prefetch_bytes)
+                .retry_timeout(Duration::from_millis(100)),
         )
         .await
         .unwrap();

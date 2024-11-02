@@ -7,7 +7,7 @@ use std::io::{self, SeekFrom};
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{Future, Stream, StreamExt, TryStream};
@@ -16,8 +16,9 @@ use rangemap::RangeSet;
 use tap::TapFallible;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Notify, mpsc};
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, error, instrument, trace, warn};
 
 use crate::storage::StorageWriter;
 use crate::{CallbackFn, Settings, StreamPhase, StreamState};
@@ -59,6 +60,12 @@ pub trait SourceStream:
         &mut self,
         start: u64,
         end: Option<u64>,
+    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+
+    /// Attempt to reconnect to the server when a failure occurs.
+    fn reconnect(
+        &mut self,
+        current_position: u64,
     ) -> impl Future<Output = Result<(), io::Error>> + Send;
 }
 
@@ -250,6 +257,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     prefetch_bytes: u64,
+    retry_timeout: Duration,
     on_progress: Option<CallbackFn<S>>,
     prefetch_complete: bool,
     prefetch_start_position: u64,
@@ -273,6 +281,7 @@ where
             content_length,
             prefetch_complete: settings.prefetch_bytes == 0,
             prefetch_bytes: settings.prefetch_bytes,
+            retry_timeout: settings.retry_timeout,
             on_progress: settings.on_progress,
             prefetch_start_position: 0,
             remaining_bytes: None,
@@ -289,6 +298,9 @@ where
         let download_start = std::time::Instant::now();
 
         loop {
+            // Some streams may get stuck if the connection has a hiccup while waiting for the next
+            // chunk. Forcing the client to abort and retry may help in these cases.
+            let next_chunk = timeout(self.retry_timeout, stream.next());
             tokio::select! {
                 position = self.seek_rx.recv() => {
                     let position = position.expect("seek_tx dropped");
@@ -310,9 +322,21 @@ where
                     }
                     continue
                 },
-                bytes = stream.next() => {
-                    if self.handle_bytes(&mut stream, bytes, download_start).await?
-                    == DownloadStatus::Complete {
+                bytes = next_chunk => {
+                    let Ok(bytes) = bytes else {
+                        warn!("timed out reading next chunk, retrying");
+                        let pos = self.writer.stream_position()?;
+                        let _ = stream
+                            .reconnect(pos)
+                            .await
+                            .tap_err(|e| warn!("error attempting to reconnect: {e:?}"));
+                        continue;
+                    };
+                    if self
+                        .handle_bytes(&mut stream, bytes, download_start)
+                        .await?
+                        == DownloadStatus::Complete
+                    {
                         debug!(
                             download_duration = format!("{:?}", download_start.elapsed()),
                             "stream finished downloading"
