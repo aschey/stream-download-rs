@@ -303,10 +303,7 @@ impl<C: Client> SourceStream for HttpStream<C> {
         }
 
         if !self.supports_range_request() {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "stream does not support range requests",
-            ));
+            warn!("Accept-Ranges header not present. Attempting seek anyway.");
         }
 
         debug!("sending HTTP range request");
