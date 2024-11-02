@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.10.1](https://github.com/aschey/stream-download-rs/compare/0.10.0..0.10.1) - 2024-11-02
+## [0.11.0](https://github.com/aschey/stream-download-rs/compare/0.10.0..0.11.0) - 2024-11-02
 
 ### Features
 
