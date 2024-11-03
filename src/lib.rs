@@ -189,6 +189,17 @@ impl<S> Settings<S> {
     }
 }
 
+#[cfg(feature = "reqwest-middleware")]
+impl Settings<http::HttpStream<::reqwest_middleware::ClientWithMiddleware>> {
+    /// Adds a new [`reqwest_middleware::Middleware`]
+    pub fn add_default_middleware<M>(middleware: M)
+    where
+        M: reqwest_middleware::Middleware,
+    {
+        http::reqwest_middleware_client::add_default_middleware(middleware);
+    }
+}
+
 /// Represents content streamed from a remote source.
 /// This struct implements [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html)
 /// and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)
@@ -201,6 +212,11 @@ impl<S> Settings<S> {
 /// result in additional request to restart the stream download from the seek point.
 ///
 /// If the stream download hasn't completed when this struct is dropped, the task will be cancelled.
+///
+/// If the stream stalls for any reason, the download task will attempt to automatically reconnect.
+/// This reconnect interval can be controlled via [`Settings::retry_timeout`].
+/// Server-side failures are not automatically handled and should be retried by the supplied
+/// [`SourceStream`] implementation if desired.
 #[derive(Debug)]
 pub struct StreamDownload<P: StorageProvider> {
     output_reader: P::Reader,
@@ -251,6 +267,61 @@ impl<P: StorageProvider> StreamDownload<P> {
         storage_provider: P,
         settings: Settings<http::HttpStream<::reqwest::Client>>,
     ) -> Result<Self, StreamInitializationError<http::HttpStream<::reqwest::Client>>> {
+        Self::new(url, storage_provider, settings).await
+    }
+
+    /// Creates a new [`StreamDownload`] that accesses an HTTP resource at the given URL.
+    /// It uses the [`reqwest_middleware::ClientWithMiddleware`] client instead of the default
+    /// [`reqwest`] client. Any global middleware set by [`Settings::add_default_middleware`] will
+    /// be automatically applied.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    /// use std::io::{self, Read};
+    /// use std::result::Result;
+    ///
+    /// use reqwest_retry::RetryTransientMiddleware;
+    /// use reqwest_retry::policies::ExponentialBackoff;
+    /// use stream_download::source::DecodeError;
+    /// use stream_download::storage::temp::TempStorageProvider;
+    /// use stream_download::{Settings, StreamDownload};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn Error>> {
+    ///     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+    ///     Settings::add_default_middleware(RetryTransientMiddleware::new_with_policy(retry_policy));
+    ///
+    ///     let mut reader = match StreamDownload::new_http_with_middleware(
+    ///         "https://some-cool-url.com/some-file.mp3".parse()?,
+    ///         TempStorageProvider::default(),
+    ///         Settings::default(),
+    ///     )
+    ///     .await
+    ///     {
+    ///         Ok(reader) => reader,
+    ///         Err(e) => return Err(e.decode_error().await)?,
+    ///     };
+    ///
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "reqwest-middleware")]
+    pub async fn new_http_with_middleware(
+        url: ::reqwest::Url,
+        storage_provider: P,
+        settings: Settings<http::HttpStream<::reqwest_middleware::ClientWithMiddleware>>,
+    ) -> Result<
+        Self,
+        StreamInitializationError<http::HttpStream<::reqwest_middleware::ClientWithMiddleware>>,
+    > {
         Self::new(url, storage_provider, settings).await
     }
 

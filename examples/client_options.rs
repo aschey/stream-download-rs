@@ -26,7 +26,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // construct it manually and pass it into `HttpStream::new`.
     let mut headers = HeaderMap::new();
     // For example, you may need to add some authentication headers with every request.
-    // If you need to support a more complex authentication scheme, see the `custom_client` example.
+    // If you need to support a more complex authentication scheme, see the `custom_client` example
+    // or consider using `reqwest_middleware` (https://docs.rs/reqwest-middleware/latest/reqwest_middleware).
     let mut header: HeaderValue = "someApiKey".parse()?;
     header.set_sensitive(true);
     headers.insert("X-Api-Key", header);

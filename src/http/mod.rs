@@ -49,6 +49,9 @@ use crate::source::{DecodeError, SourceStream};
 #[cfg(feature = "reqwest")]
 pub mod reqwest_client;
 
+#[cfg(feature = "reqwest-middleware")]
+pub(crate) mod reqwest_middleware_client;
+
 /// Wrapper trait for an HTTP client that exposes only functionality necessary for retrieving the
 /// stream content. If the `reqwest` feature is enabled, this trait is implemented for
 /// [reqwest::Client](https://docs.rs/reqwest/latest/reqwest/struct.Client.html).

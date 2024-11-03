@@ -68,6 +68,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (_stream, handle) = rodio::OutputStream::try_default()?;
     let sink = rodio::Sink::try_new(&handle)?;
 
+    // Note: you may want to consider creating middleware using `reqwest-middleware` instead of a
+    // custom client as shown here.
+    // See https://docs.rs/reqwest-middleware/latest/reqwest_middleware.
     let stream = HttpStream::<BearerAuthClient>::create(
         "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
          No 6 - Movement 2 Un poco andante.MP3"
