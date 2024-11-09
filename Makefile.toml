@@ -9,7 +9,7 @@ script_runner = "@shell"
 install_crate = "cargo-nextest"
 
 [tasks.coverage]
-env = { RUST_LOG = "trace", NEXTEST_TEST_THREADS = 250 }
+env = { RUST_LOG = "trace", NEXTEST_TEST_THREADS = 200 }
 script = '''
 cargo llvm-cov nextest --all-features --lcov --ignore-filename-regex ".cargo|.*_test\.rs" > ./target/debug/lcov.info
 genhtml -o ./target/debug/coverage/ --show-details --highlight --ignore-errors source --legend ./target/debug/lcov.info
@@ -48,29 +48,29 @@ env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings" }
 toolchain = "nightly"
 command = "cargo"
 args = [
-    "doc",
-    "-Zunstable-options",
-    "-Zrustdoc-scrape-examples",
-    "--all-features",
-    "--no-deps",
-    "--open",
+  "doc",
+  "-Zunstable-options",
+  "-Zrustdoc-scrape-examples",
+  "--all-features",
+  "--no-deps",
+  "--open",
 ]
 
 [tasks.watch-docs]
 env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings" }
 command = "watchexec"
 args = [
-    "-r",
-    "-e",
-    "rs,md",
-    "--",
-    "cargo",
-    "+nightly",
-    "doc",
-    "-Zunstable-options",
-    "-Zrustdoc-scrape-examples",
-    "--all-features",
-    "--no-deps",
+  "-r",
+  "-e",
+  "rs,md",
+  "--",
+  "cargo",
+  "+nightly",
+  "doc",
+  "-Zunstable-options",
+  "-Zrustdoc-scrape-examples",
+  "--all-features",
+  "--no-deps",
 ]
 install_crate = "watchexec-cli"
 
