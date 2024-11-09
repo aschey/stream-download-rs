@@ -27,7 +27,7 @@ reqwest = { version = "0.12.2", features = [
 reqwest-middleware = { version = "0.3", optional = true }
 tap = "1.0.1"
 tempfile = { version = "3.1", optional = true }
-thiserror = "1.0.21"
+thiserror = "2.0.1"
 tokio = { version = "1.27", features = ["sync", "macros", "rt", "time"] }
 tokio-util = "0.7.1"
 tracing = "0.1.36"
