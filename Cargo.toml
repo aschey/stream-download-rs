@@ -43,7 +43,7 @@ temp-storage = ["dep:tempfile"]
 open-dal = ["dep:opendal", "dep:pin-project-lite", "tokio-util/compat"]
 
 [dev-dependencies]
-rodio = { version = "0.19.0", default-features = false, features = [
+rodio = { version = "0.20.1", default-features = false, features = [
   "symphonia-all",
 ] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
