@@ -133,7 +133,9 @@ jobs:
 
       - name: Lint dependencies
         uses: EmbarkStudios/cargo-deny-action@v2
-      - name: Security vulnerabilities audit
-        uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # disabling until https://github.com/rustsec/audit-check/issues/28 is fixed
+      # - name: Security vulnerabilities audit
+      #   uses: rustsec/audit-check@v2.0.0
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
