@@ -36,6 +36,19 @@ pub mod storage;
 
 pub use settings::*;
 
+/// A handle that can be usd to interact with the stream remotely.
+#[derive(Debug, Clone)]
+pub struct StreamHandle {
+    finished: CancellationToken,
+}
+
+impl StreamHandle {
+    /// Wait for the stream download task to complete.
+    pub async fn wait_for_completion(self) {
+        self.finished.cancelled().await;
+    }
+}
+
 /// Represents content streamed from a remote source.
 /// This struct implements [read](https://doc.rust-lang.org/stable/std/io/trait.Read.html)
 /// and [seek](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)
@@ -326,6 +339,14 @@ impl<P: StorageProvider> StreamDownload<P> {
         self.download_task_cancellation_token.clone()
     }
 
+    /// Returns a [`StreamHandle`] that can be used to interact with
+    /// the stream remotely.
+    pub fn handle(&self) -> StreamHandle {
+        StreamHandle {
+            finished: self.download_task_cancellation_token.clone(),
+        }
+    }
+
     async fn from_create_stream<S, F, Fut>(
         create_stream: F,
         storage_provider: P,
@@ -352,6 +373,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         let download_status = DownloadStatus::default();
         tokio::spawn({
             let download_status = download_status.clone();
+            let cancellation_token = cancellation_token.clone();
             async move {
                 if source
                     .download(stream)
@@ -362,6 +384,7 @@ impl<P: StorageProvider> StreamDownload<P> {
                     download_status.set_failed();
                     source.signal_download_complete();
                 }
+                cancellation_token.cancel();
                 debug!("download task finished");
             }
         });
