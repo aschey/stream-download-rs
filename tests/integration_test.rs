@@ -7,8 +7,6 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fs, io};
 
-mod setup;
-
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use opendal::{Operator, services};
@@ -22,9 +20,11 @@ use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::{MemoryStorage, MemoryStorageProvider};
 use stream_download::storage::temp::TempStorageProvider;
-use stream_download::{Settings, StreamDownload, StreamInitializationError, http};
+use stream_download::{Settings, StreamDownload, StreamInitializationError, StreamState, http};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::spawn_blocking;
+
+mod setup;
 
 #[derive(Debug)]
 struct TestClient {
@@ -262,7 +262,7 @@ fn new(#[case] prefetch_bytes: u64) {
             format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                 .parse()
                 .unwrap(),
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
@@ -292,7 +292,7 @@ fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] c
         let mut reader = StreamDownload::new_open_dal(
             OpenDalStreamParams::new(operator, "music.mp3")
                 .chunk_size(NonZeroUsize::new(chunk_size).unwrap()),
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
@@ -340,7 +340,7 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
 
         let mut reader = StreamDownload::from_stream(
             stream,
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
@@ -377,7 +377,7 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
 
         let mut reader = StreamDownload::from_stream(
             stream,
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
@@ -547,6 +547,56 @@ fn slow_download(
         .unwrap();
 
         handle.await.unwrap();
+    });
+}
+
+#[rstest]
+fn cancel_on_drop(
+    #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
+    #[values(MemoryStorageProvider)] storage: impl StorageProvider + 'static,
+) {
+    SERVER_RT.get().unwrap().block_on(async move {
+        let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
+
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let (command, responder) = rx.recv().await.unwrap();
+            assert_eq!(Command::GetUrl, command);
+            responder.send(Duration::from_millis(50)).unwrap();
+
+            while let Some((command, responder)) = rx.recv().await {
+                assert!(matches!(command, Command::NextChunk(_)));
+                responder.send(Duration::from_millis(50)).unwrap();
+            }
+        });
+
+        let reader = StreamDownload::from_stream(
+            http::HttpStream::new(
+                TestClient::new(tx, true),
+                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                    .parse()
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+            storage,
+            Settings::default()
+                .prefetch_bytes(prefetch_bytes)
+                .cancel_on_drop(true),
+        )
+        .await
+        .unwrap();
+        let reader_handle = reader.handle();
+        drop(reader);
+        tokio::time::timeout(
+            Duration::from_millis(10),
+            reader_handle.wait_for_completion(),
+        )
+        .await
+        .unwrap();
+
+        // don't care if this errors because channel send will fail due to stream being dropped
+        let _ = handle.await;
     });
 }
 
@@ -816,7 +866,7 @@ fn backpressure(
                 .parse()
                 .unwrap(),
             BoundedStorageProvider::new(
-                TempStorageProvider::default(),
+                MemoryStorageProvider,
                 NonZeroUsize::new(bounded_size * multiplier).unwrap(),
             ),
             Settings::default().prefetch_bytes(prefetch_bytes),
@@ -1058,7 +1108,7 @@ fn cancel_download(#[case] prefetch_bytes: u64) {
             format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                 .parse()
                 .unwrap(),
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
@@ -1085,8 +1135,6 @@ fn cancel_download(#[case] prefetch_bytes: u64) {
 #[case(1)]
 #[case(1024)]
 fn on_progress(#[case] prefetch_bytes: u64) {
-    use stream_download::StreamState;
-
     let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
     SERVER_RT.get().unwrap().block_on(async move {
@@ -1124,7 +1172,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
             format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                 .parse()
                 .unwrap(),
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default()
                 .prefetch_bytes(prefetch_bytes)
                 .on_progress(move |stream: &HttpStream<_>, info, _| {
@@ -1153,8 +1201,6 @@ fn on_progress(#[case] prefetch_bytes: u64) {
 
 #[rstest]
 fn on_progress_no_prefetch() {
-    use stream_download::StreamState;
-
     let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
     SERVER_RT.get().unwrap().block_on(async move {
@@ -1179,7 +1225,7 @@ fn on_progress_no_prefetch() {
             format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                 .parse()
                 .unwrap(),
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default().prefetch_bytes(0).on_progress(
                 move |stream: &HttpStream<_>, info, _| {
                     let _ = tx.send((stream.content_length(), info));
@@ -1209,8 +1255,6 @@ fn on_progress_no_prefetch() {
 #[rstest]
 #[case(512*1024)]
 fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
-    use stream_download::StreamState;
-
     let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
     SERVER_RT.get().unwrap().block_on(async move {
@@ -1235,7 +1279,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
             format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
                 .parse()
                 .unwrap(),
-            TempStorageProvider::default(),
+            MemoryStorageProvider,
             Settings::default()
                 .prefetch_bytes(prefetch_bytes)
                 .on_progress(move |stream: &HttpStream<_>, info, _| {
