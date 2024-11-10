@@ -8,15 +8,12 @@ use stream_download::{Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::default().add_directive("stream_download=trace".parse()?))
         .with_line_number(true)
         .with_file(true)
         .init();
-
-    let (_stream, handle) = rodio::OutputStream::try_default()?;
-    let sink = rodio::Sink::try_new(&handle)?;
 
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
@@ -37,11 +34,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(reader) => reader,
         Err(e) => return Err(e.decode_error().await)?,
     };
-    sink.append(rodio::Decoder::new(reader)?);
 
     let handle = tokio::task::spawn_blocking(move || {
+        let (_stream, handle) = rodio::OutputStream::try_default()?;
+        let sink = rodio::Sink::try_new(&handle)?;
+        sink.append(rodio::Decoder::new(reader)?);
         sink.sleep_until_end();
+
+        Ok::<_, Box<dyn Error + Send + Sync>>(())
     });
-    handle.await?;
+    handle.await??;
     Ok(())
 }

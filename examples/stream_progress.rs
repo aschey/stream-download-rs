@@ -71,6 +71,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let sink = rodio::Sink::try_new(&handle)?;
         sink.append(rodio::Decoder::new(reader)?);
         sink.sleep_until_end();
+
         Ok::<_, Box<dyn Error + Send + Sync>>(())
     })
     .await??;
