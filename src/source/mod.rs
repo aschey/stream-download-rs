@@ -1,5 +1,6 @@
 //! Provides the [`SourceStream`] trait which abstracts over the transport used to
 //! stream remote content.
+use std::convert::Infallible;
 use std::error::Error;
 use std::fmt::Debug;
 use std::future;
@@ -65,6 +66,10 @@ pub trait SourceStream:
         &mut self,
         current_position: u64,
     ) -> impl Future<Output = Result<(), io::Error>> + Send;
+
+    /// Returns whether seeking is supported in the stream.
+    /// If this method returns `false`, [`SourceStream::seek_range`] will never be invoked.
+    fn supports_seek(&self) -> bool;
 }
 
 /// Trait for decoding extra error information asynchronously.
@@ -72,6 +77,13 @@ pub trait DecodeError: Error + Send + Sized {
     /// Decode extra error information.
     fn decode_error(self) -> impl Future<Output = String> + Send {
         future::ready(self.to_string())
+    }
+}
+
+impl DecodeError for Infallible {
+    async fn decode_error(self) -> String {
+        // This will never get called since it's infallible
+        String::new()
     }
 }
 
@@ -173,7 +185,7 @@ where
 
     async fn handle_seek(&mut self, stream: &mut S, position: &Option<u64>) -> io::Result<()> {
         let position = position.expect("seek_tx dropped");
-        if self.should_seek(position)? {
+        if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
 
             if self.prefetch_complete {
@@ -357,7 +369,10 @@ where
         Ok(new_position)
     }
 
-    fn should_seek(&mut self, position: u64) -> io::Result<bool> {
+    fn should_seek(&mut self, stream: &S, position: u64) -> io::Result<bool> {
+        if !stream.supports_seek() {
+            return Ok(false);
+        }
         Ok(if let Some(range) = self.downloaded.get(position) {
             !range.contains(&self.writer.stream_position()?)
         } else {

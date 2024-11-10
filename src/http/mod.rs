@@ -351,6 +351,10 @@ impl<C: Client> SourceStream for HttpStream<C> {
             Ok(())
         }
     }
+
+    fn supports_seek(&self) -> bool {
+        true
+    }
 }
 
 /// HTTP range header key

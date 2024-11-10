@@ -12,6 +12,7 @@ use futures::{Stream, StreamExt};
 use opendal::{Operator, services};
 use rstest::rstest;
 use setup::{SERVER_ADDR, SERVER_RT};
+use stream_download::async_read::AsyncReadStreamParams;
 use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
 use stream_download::source::{DecodeError, SourceStream};
@@ -1304,4 +1305,22 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
         let last_content_length = progress_task.await.unwrap();
         assert_eq!(read_bytes as u64, last_content_length);
     });
+}
+
+#[tokio::test]
+async fn async_read_file() {
+    let mut reader = StreamDownload::new_async_read(
+        AsyncReadStreamParams::new(tokio::fs::File::open("./assets/music.mp3").await.unwrap()),
+        MemoryStorageProvider,
+        Settings::default(),
+    )
+    .await
+    .unwrap();
+    spawn_blocking(move || {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        compare(get_file_buf(), buf);
+    })
+    .await
+    .unwrap();
 }

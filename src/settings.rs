@@ -115,7 +115,7 @@ impl<S> Settings<S> {
     }
 
     /// If set to `true`, this will cause the stream download task to automatically cancel when the
-    /// [`crate::StreamDownload`] instance is dropped.
+    /// [`StreamDownload`][crate::StreamDownload] instance is dropped.
     #[must_use]
     pub fn cancel_on_drop(self, cancel_on_drop: bool) -> Self {
         Self {
