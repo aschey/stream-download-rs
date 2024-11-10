@@ -5,23 +5,21 @@ use std::fmt::Debug;
 use std::future;
 use std::io::{self, SeekFrom};
 use std::ops::Range;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::{Duration, Instant};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{Future, Stream, StreamExt, TryStream};
-use parking_lot::{Condvar, Mutex, RwLock};
-use rangemap::RangeSet;
+use handle::{Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle};
 use tap::TapFallible;
-use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::storage::StorageWriter;
 use crate::{ProgressFn, ReconnectFn, Settings, StreamPhase, StreamState};
+
+pub(crate) mod handle;
 
 /// Represents a remote resource that can be streamed over the network. Streaming
 /// over http is implemented via the [`HttpStream`](crate::http::HttpStream)
@@ -74,170 +72,6 @@ pub trait DecodeError: Error + Send + Sized {
     /// Decode extra error information.
     fn decode_error(self) -> impl Future<Output = String> + Send {
         future::ready(self.to_string())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct SourceHandle {
-    downloaded: Downloaded,
-    requested_position: RequestedPosition,
-    position_reached: PositionReached,
-    content_length: Option<u64>,
-    seek_tx: mpsc::Sender<u64>,
-    notify_read: NotifyRead,
-}
-
-impl SourceHandle {
-    pub(crate) fn get_downloaded_at_position(&self, position: u64) -> Option<Range<u64>> {
-        self.downloaded.get(position)
-    }
-
-    pub(crate) fn request_position(&self, position: u64) {
-        self.requested_position.set(position);
-    }
-
-    pub(crate) fn wait_for_requested_position(&self) {
-        self.position_reached.wait_for_position_reached();
-    }
-
-    pub(crate) fn notify_read(&self) {
-        self.notify_read.notify_read();
-    }
-
-    pub(crate) fn notify_waiting(&self) {
-        self.notify_read.notify_waiting();
-    }
-
-    pub(crate) fn seek(&self, position: u64) {
-        self.seek_tx
-            .try_send(position)
-            .tap_err(|e| {
-                if let TrySendError::Full(capacity) = e {
-                    error!("Seek buffer full. Capacity: {capacity}");
-                }
-            })
-            .ok();
-    }
-
-    pub(crate) fn content_length(&self) -> Option<u64> {
-        self.content_length
-    }
-}
-
-#[derive(Debug, Clone)]
-struct RequestedPosition(Arc<AtomicI64>);
-
-impl Default for RequestedPosition {
-    fn default() -> Self {
-        Self(Arc::new(AtomicI64::new(-1)))
-    }
-}
-
-// relaxed ordering as we are not using the atomic to
-// lock something or to synchronize threads.
-impl RequestedPosition {
-    fn clear(&self) {
-        self.0.store(-1, Ordering::Relaxed);
-    }
-
-    fn get(&self) -> Option<u64> {
-        let val = self.0.load(Ordering::Relaxed);
-        if val == -1 { None } else { Some(val as u64) }
-    }
-
-    fn set(&self, position: u64) {
-        self.0.store(position as i64, Ordering::Relaxed);
-    }
-}
-
-#[derive(Default, Debug)]
-struct Waiter {
-    position_reached: bool,
-    stream_done: bool,
-}
-
-#[derive(Default, Clone, Debug)]
-struct PositionReached(Arc<(Mutex<Waiter>, Condvar)>);
-
-impl PositionReached {
-    fn notify_position_reached(&self) {
-        let (mutex, cvar) = self.0.as_ref();
-        mutex.lock().position_reached = true;
-        cvar.notify_all();
-    }
-
-    fn notify_stream_done(&self) {
-        let (mutex, cvar) = self.0.as_ref();
-        mutex.lock().stream_done = true;
-        cvar.notify_all();
-    }
-
-    fn wait_for_position_reached(&self) {
-        let (mutex, cvar) = self.0.as_ref();
-        let mut waiter = mutex.lock();
-        if waiter.stream_done {
-            return;
-        }
-
-        let wait_start = Instant::now();
-
-        cvar.wait_while(&mut waiter, |waiter| {
-            !waiter.stream_done && !waiter.position_reached
-        });
-        debug!(
-            elapsed = format!("{:?}", wait_start.elapsed()),
-            "position reached"
-        );
-        if !waiter.stream_done {
-            waiter.position_reached = false;
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct Downloaded(Arc<RwLock<RangeSet<u64>>>);
-
-impl Downloaded {
-    fn add(&self, range: Range<u64>) {
-        if range.end > range.start {
-            self.0.write().insert(range);
-        }
-    }
-
-    fn get(&self, position: u64) -> Option<Range<u64>> {
-        self.0.read().get(&position).cloned()
-    }
-
-    fn next_gap(&self, range: &Range<u64>) -> Option<Range<u64>> {
-        self.0.read().gaps(range).next()
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-struct NotifyRead {
-    notify: Arc<Notify>,
-    write_requested: Arc<AtomicBool>,
-}
-
-impl NotifyRead {
-    fn request(&self) {
-        self.write_requested.store(true, Ordering::SeqCst);
-    }
-
-    fn notify_read(&self) {
-        if self.write_requested.swap(false, Ordering::SeqCst) {
-            self.notify.notify_one();
-        }
-    }
-
-    fn notify_waiting(&self) {
-        if self.write_requested.load(Ordering::SeqCst) {
-            self.notify.notify_one();
-        }
-    }
-
-    async fn wait_for_read(&self) {
-        self.notify.notified().await;
     }
 }
 
