@@ -51,6 +51,7 @@ pub struct Settings<S> {
     pub(crate) prefetch_bytes: u64,
     pub(crate) seek_buffer_size: usize,
     pub(crate) retry_timeout: Duration,
+    pub(crate) cancel_on_drop: bool,
     #[educe(Debug = false, PartialEq = false)]
     pub(crate) on_progress: Option<ProgressFn<S>>,
     #[educe(Debug = false, PartialEq = false)]
@@ -63,6 +64,7 @@ impl<S> Default for Settings<S> {
             prefetch_bytes: 256 * 1024,
             seek_buffer_size: 128,
             retry_timeout: Duration::from_secs(5),
+            cancel_on_drop: false,
             on_progress: None,
             on_reconnect: None,
         }
@@ -112,6 +114,16 @@ impl<S> Settings<S> {
         }
     }
 
+    /// If set to `true`, this will cause the stream download task to automatically cancel when the
+    /// [`crate::StreamDownload`] instance is dropped.
+    #[must_use]
+    pub fn cancel_on_drop(self, cancel_on_drop: bool) -> Self {
+        Self {
+            cancel_on_drop,
+            ..self
+        }
+    }
+
     /// Attach a callback function that will be called when a new chunk of the stream is processed.
     /// The provided [`CancellationToken`] can be used to immediately cancel the stream.
     ///
@@ -140,6 +152,7 @@ impl<S> Settings<S> {
 
     /// Attach a callback function that will be called when the stream reconnects after a failure.
     /// The provided [`CancellationToken`] can be used to immediately cancel the stream.
+    #[must_use]
     pub fn on_reconnect<F>(mut self, f: F) -> Self
     where
         F: FnMut(&S, &CancellationToken) + Send + Sync + 'static,

@@ -59,6 +59,7 @@ pub struct StreamDownload<P: StorageProvider> {
     handle: SourceHandle,
     download_status: DownloadStatus,
     download_task_cancellation_token: CancellationToken,
+    cancel_on_drop: bool,
 }
 
 impl<P: StorageProvider> StreamDownload<P> {
@@ -344,6 +345,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             .into_reader_writer(content_length)
             .map_err(StreamInitializationError::StorageCreationFailure)?;
         let cancellation_token = CancellationToken::new();
+        let cancel_on_drop = settings.cancel_on_drop;
         let mut source = Source::new(writer, content_length, settings, cancellation_token.clone());
         let handle = source.source_handle();
 
@@ -369,6 +371,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             handle,
             download_status,
             download_task_cancellation_token: cancellation_token,
+            cancel_on_drop,
         })
     }
 
@@ -439,7 +442,9 @@ impl<S: SourceStream> DecodeError for StreamInitializationError<S> {
 
 impl<P: StorageProvider> Drop for StreamDownload<P> {
     fn drop(&mut self) {
-        self.cancel_download();
+        if self.cancel_on_drop {
+            self.cancel_download();
+        }
     }
 }
 
