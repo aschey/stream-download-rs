@@ -67,6 +67,7 @@ impl OpenDalStreamParams {
 
     /// Sets the chunk size for the [`OpenDalStream`].
     /// The default value is 4096.
+    #[must_use]
     pub fn chunk_size(mut self, chunk_size: NonZeroUsize) -> Self {
         self.chunk_size = chunk_size.get();
         self
@@ -171,6 +172,10 @@ impl SourceStream for OpenDalStream {
 
     async fn reconnect(&mut self, current_position: u64) -> io::Result<()> {
         self.seek_range(current_position, None).await
+    }
+
+    fn supports_seek(&self) -> bool {
+        true
     }
 }
 

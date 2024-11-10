@@ -20,12 +20,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use educe::Educe;
+pub use settings::*;
 use source::handle::SourceHandle;
 use source::{DecodeError, Source, SourceStream};
 use storage::StorageProvider;
 use tap::{Tap, TapFallible};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
+
+#[cfg(feature = "async-read")]
+pub mod async_read;
 #[cfg(feature = "http")]
 pub mod http;
 #[cfg(feature = "open-dal")]
@@ -33,8 +37,6 @@ pub mod open_dal;
 mod settings;
 pub mod source;
 pub mod storage;
-
-pub use settings::*;
 
 /// A handle that can be usd to interact with the stream remotely.
 #[derive(Debug, Clone)]
@@ -175,7 +177,6 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::new(url, storage_provider, settings).await
     }
 
-    #[cfg(feature = "open-dal")]
     /// Creates a new [`StreamDownload`] that uses an `OpenDAL` resource.
     /// See the [`open_dal`] documentation for more details.
     ///
@@ -216,11 +217,55 @@ impl<P: StorageProvider> StreamDownload<P> {
     ///     Ok(())
     /// }
     /// ```
+    #[cfg(feature = "open-dal")]
     pub async fn new_open_dal(
         params: open_dal::OpenDalStreamParams,
         storage_provider: P,
         settings: Settings<open_dal::OpenDalStream>,
     ) -> Result<Self, StreamInitializationError<open_dal::OpenDalStream>> {
+        Self::new(params, storage_provider, settings).await
+    }
+
+    /// Creates a new [`StreamDownload`] that uses an [`AsyncRead`][tokio::io::AsyncRead] resource.
+    ///
+    /// # Example reading from `stdin`
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    /// use std::io::{self, Read};
+    /// use std::result::Result;
+    ///
+    /// use stream_download::async_read::AsyncReadStreamParams;
+    /// use stream_download::storage::temp::TempStorageProvider;
+    /// use stream_download::{Settings, StreamDownload};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut reader = StreamDownload::new_async_read(
+    ///         AsyncReadStreamParams::new(tokio::io::stdin()),
+    ///         TempStorageProvider::new(),
+    ///         Settings::default(),
+    ///     )
+    ///     .await?;
+    ///
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "async-read")]
+    pub async fn new_async_read<T>(
+        params: async_read::AsyncReadStreamParams<T>,
+        storage_provider: P,
+        settings: Settings<async_read::AsyncReadStream<T>>,
+    ) -> Result<Self, StreamInitializationError<async_read::AsyncReadStream<T>>>
+    where
+        T: tokio::io::AsyncRead + Send + Sync + Unpin + 'static,
+    {
         Self::new(params, storage_provider, settings).await
     }
 

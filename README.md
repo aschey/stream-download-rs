@@ -28,7 +28,7 @@ transports and storage implementations.
 cargo add stream-download
 ```
 
-## Features
+## Feature Flags
 
 - `http` - adds an HTTP-based implementation of the
   [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html)
@@ -45,6 +45,8 @@ cargo add stream-download
   `reqwest` feature.
 - `open-dal` - adds a `SourceStream` implementation that uses
   [Apache OpenDAL](https://crates.io/crates/opendal) as the backend.
+- `async-read` - adds a `SourceStream` implementation for any type implementing
+  [`AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html).
 - `temp-storage` - adds a temporary file-based storage backend (enabled by
   default).
 
@@ -95,11 +97,15 @@ See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
 
 Transports implement the
 [`SourceStream`](https://docs.rs/stream-download/latest/stream_download/source/trait.SourceStream.html)
-trait. Two types of transports are provided out of the box -
-[`http`](https://docs.rs/stream-download/latest/stream_download/http) for
-typical HTTP-based sources and
-[`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal)
-which is more complex, but supports a large variety of services.
+trait. A few types of transports are provided out of the box:
+
+- [`http`](https://docs.rs/stream-download/latest/stream_download/http) for
+  typical HTTP-based sources.
+- [`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal)
+  which is more complex, but supports a large variety of services.
+- [`async_read`](https://docs.rs/stream-download/latest/stream_download/async_read)
+  for any source implementing
+  [`AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html).
 
 Only `http` is enabled by default. You can provide a custom transport by
 implementing `SourceStream` yourself.
