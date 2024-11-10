@@ -27,6 +27,8 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 [advisories]
 version = 2
 yanked = "deny"
+# RUSTSEC-2024-0384 is an unmaintained wasm-only dependency and we currently don't support wasm
+ignore = ["RUSTSEC-2024-0384"]
 
 [bans]
 multiple-versions = "allow"
