@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{Future, Stream, StreamExt, TryStream};
-use handle::{Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle};
+use handle::{
+    DownloadStatus, Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle,
+};
 use tap::TapFallible;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -88,7 +90,7 @@ impl DecodeError for Infallible {
 }
 
 #[derive(PartialEq, Eq)]
-enum DownloadStatus {
+enum DownloadAction {
     Continue,
     Complete,
 }
@@ -96,6 +98,7 @@ enum DownloadStatus {
 pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     writer: W,
     downloaded: Downloaded,
+    download_status: DownloadStatus,
     requested_position: RequestedPosition,
     position_reached: PositionReached,
     notify_read: NotifyRead,
@@ -126,6 +129,7 @@ where
         Self {
             writer,
             downloaded: Downloaded::default(),
+            download_status: DownloadStatus::default(),
             requested_position: RequestedPosition::default(),
             position_reached: PositionReached::default(),
             notify_read: NotifyRead::default(),
@@ -144,7 +148,17 @@ where
     }
 
     #[instrument(skip_all)]
-    pub(crate) async fn download(&mut self, mut stream: S) -> io::Result<()> {
+    pub(crate) async fn download(&mut self, mut stream: S) {
+        let res = self.download_inner(&mut stream).await;
+
+        if let Err(e) = res {
+            error!("download failed: {e:?}");
+            self.download_status.set_failed();
+        }
+        self.signal_download_complete();
+    }
+
+    async fn download_inner(&mut self, stream: &mut S) -> io::Result<()> {
         debug!("starting file download");
         let download_start = std::time::Instant::now();
 
@@ -154,17 +168,17 @@ where
             let next_chunk = timeout(self.retry_timeout, stream.next());
             tokio::select! {
                 position = self.seek_rx.recv() => {
-                    self.handle_seek(&mut stream, &position).await?;
+                    self.handle_seek(stream, &position).await?;
                 },
                 bytes = next_chunk => {
                     let Ok(bytes) = bytes else {
-                        self.handle_reconnect(&mut stream).await?;
+                        self.handle_reconnect(stream).await?;
                         continue;
                     };
                     if self
-                        .handle_bytes(&mut stream, bytes, download_start)
+                        .handle_bytes(stream, bytes, download_start)
                         .await?
-                        == DownloadStatus::Complete
+                        == DownloadAction::Complete
                     {
                         debug!(
                             download_duration = format!("{:?}", download_start.elapsed()),
@@ -179,7 +193,7 @@ where
                 }
             };
         }
-        self.report_download_complete(&stream, download_start)?;
+        self.report_download_complete(stream, download_start)?;
         Ok(())
     }
 
@@ -227,7 +241,7 @@ where
         bytes: Option<Bytes>,
         start_position: u64,
         download_start: Instant,
-    ) -> io::Result<DownloadStatus> {
+    ) -> io::Result<DownloadAction> {
         let Some(bytes) = bytes else {
             self.prefetch_complete = true;
             debug!("file shorter than prefetch length, download finished");
@@ -259,24 +273,26 @@ where
         }
 
         self.report_prefetch_progress(stream, stream_position, download_start, written);
-        Ok(DownloadStatus::Continue)
+        Ok(DownloadAction::Continue)
     }
 
-    async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadStatus> {
-        if let Some(content_length) = self.content_length {
-            let gap = self.get_download_gap(content_length);
-            if let Some(gap) = gap {
-                debug!(
-                    missing = format!("{gap:?}"),
-                    "downloading missing stream chunk"
-                );
-                self.seek(stream, gap.start, Some(gap.end)).await?;
-                return Ok(DownloadStatus::Continue);
+    async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
+        if stream.supports_seek() {
+            if let Some(content_length) = self.content_length {
+                let gap = self.get_download_gap(content_length);
+                if let Some(gap) = gap {
+                    debug!(
+                        missing = format!("{gap:?}"),
+                        "downloading missing stream chunk"
+                    );
+                    self.seek(stream, gap.start, Some(gap.end)).await?;
+                    return Ok(DownloadAction::Continue);
+                }
             }
         }
         self.writer.flush()?;
         self.signal_download_complete();
-        Ok(DownloadStatus::Complete)
+        Ok(DownloadAction::Complete)
     }
 
     async fn handle_bytes(
@@ -284,12 +300,12 @@ where
         stream: &mut S,
         bytes: Option<Result<Bytes, S::Error>>,
         download_start: Instant,
-    ) -> io::Result<DownloadStatus> {
+    ) -> io::Result<DownloadAction> {
         let bytes = match bytes.transpose() {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("Error fetching chunk from stream: {e:?}");
-                return Ok(DownloadStatus::Continue);
+                return Ok(DownloadAction::Continue);
             }
         };
 
@@ -316,7 +332,7 @@ where
         let new_position = self.write(bytes).await?;
         self.report_downloading_progress(stream, new_position, download_start, bytes_len)?;
 
-        Ok(DownloadStatus::Continue)
+        Ok(DownloadAction::Continue)
     }
 
     async fn write(&mut self, bytes: Bytes) -> io::Result<u64> {
@@ -391,7 +407,7 @@ where
         self.downloaded.next_gap(&range)
     }
 
-    pub(crate) fn signal_download_complete(&self) {
+    fn signal_download_complete(&self) {
         self.position_reached.notify_stream_done();
     }
 
@@ -444,7 +460,8 @@ where
         self.report_progress(stream, StreamState {
             current_position: pos,
             elapsed: download_start.elapsed(),
-            current_chunk: self.downloaded.get(pos - 1).expect(""),
+            // ensure no subtraction overflow
+            current_chunk: self.downloaded.get(pos.max(1) - 1).unwrap_or_default(),
             phase: StreamPhase::Complete,
         });
         Ok(())
@@ -453,6 +470,7 @@ where
     pub(crate) fn source_handle(&self) -> SourceHandle {
         SourceHandle {
             downloaded: self.downloaded.clone(),
+            download_status: self.download_status.clone(),
             requested_position: self.requested_position.clone(),
             notify_read: self.notify_read.clone(),
             position_reached: self.position_reached.clone(),

@@ -14,6 +14,7 @@ use tracing::{debug, error};
 #[derive(Debug, Clone)]
 pub(crate) struct SourceHandle {
     pub(super) downloaded: Downloaded,
+    pub(super) download_status: DownloadStatus,
     pub(super) requested_position: RequestedPosition,
     pub(super) position_reached: PositionReached,
     pub(super) content_length: Option<u64>,
@@ -55,6 +56,10 @@ impl SourceHandle {
 
     pub(crate) fn content_length(&self) -> Option<u64> {
         self.content_length
+    }
+
+    pub(crate) fn is_failed(&self) -> bool {
+        self.download_status.is_failed()
     }
 }
 
@@ -172,5 +177,18 @@ impl NotifyRead {
 
     pub(super) async fn wait_for_read(&self) {
         self.notify.notified().await;
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub(super) struct DownloadStatus(Arc<AtomicBool>);
+
+impl DownloadStatus {
+    pub(super) fn set_failed(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    fn is_failed(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
     }
 }

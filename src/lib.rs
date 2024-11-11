@@ -16,15 +16,13 @@
 use std::fmt::Debug;
 use std::future::{self, Future};
 use std::io::{self, Read, Seek, SeekFrom};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use educe::Educe;
 pub use settings::*;
 use source::handle::SourceHandle;
 use source::{DecodeError, Source, SourceStream};
 use storage::StorageProvider;
-use tap::{Tap, TapFallible};
+use tap::Tap;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -72,7 +70,6 @@ impl StreamHandle {
 pub struct StreamDownload<P: StorageProvider> {
     output_reader: P::Reader,
     handle: SourceHandle,
-    download_status: DownloadStatus,
     download_task_cancellation_token: CancellationToken,
     cancel_on_drop: bool,
 }
@@ -415,20 +412,10 @@ impl<P: StorageProvider> StreamDownload<P> {
         let mut source = Source::new(writer, content_length, settings, cancellation_token.clone());
         let handle = source.source_handle();
 
-        let download_status = DownloadStatus::default();
         tokio::spawn({
-            let download_status = download_status.clone();
             let cancellation_token = cancellation_token.clone();
             async move {
-                if source
-                    .download(stream)
-                    .await
-                    .tap_err(|e| error!("Error downloading stream: {e}"))
-                    .is_err()
-                {
-                    download_status.set_failed();
-                    source.signal_download_complete();
-                }
+                source.download(stream).await;
                 cancellation_token.cancel();
                 debug!("download task finished");
             }
@@ -437,7 +424,6 @@ impl<P: StorageProvider> StreamDownload<P> {
         Ok(Self {
             output_reader: reader,
             handle,
-            download_status,
             download_task_cancellation_token: cancellation_token,
             cancel_on_drop,
         })
@@ -476,7 +462,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     fn check_for_failure(&self) -> io::Result<()> {
-        if self.download_status.is_failed() {
+        if self.handle.is_failed() {
             Err(io::Error::new(
                 io::ErrorKind::Other,
                 "stream failed to download",
@@ -597,19 +583,6 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
         self.output_reader
             .seek(SeekFrom::Start(absolute_seek_position))
             .tap(|p| debug!(position = format!("{p:?}"), "returning seek position"))
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-struct DownloadStatus(Arc<AtomicBool>);
-
-impl DownloadStatus {
-    fn set_failed(&self) {
-        self.0.store(true, Ordering::SeqCst);
-    }
-
-    fn is_failed(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
     }
 }
 
