@@ -1,7 +1,6 @@
 use std::error::Error;
-use std::io::IsTerminal;
 
-use stream_download::async_read::AsyncReadStreamParams;
+use stream_download::process::{Command, ProcessStreamParams};
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 use tracing::metadata::LevelFilter;
@@ -15,26 +14,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
-    if std::io::stdin().is_terminal() {
-        if cfg!(windows) {
-            Err(
-                "Pipe in an input stream. Ex: Get-Content ./assets/music.mp3 -AsByteStream | \
-                 cargo run --example=stdin --features=async-read",
-            )?;
-        } else {
-            Err(
-                "Pipe in an input stream. Ex: cat ./assets/music.mp3 | cargo run --example=stdin \
-                 --features=async-read",
-            )?;
-        }
-    }
-
-    let reader = StreamDownload::new_async_read(
-        AsyncReadStreamParams::new(tokio::io::stdin()),
+    // This is a contrived example (there's no reason to use a process just to cat a file), but
+    // it demonstrates how to use an arbitrary command as input
+    let cmd = if cfg!(windows) {
+        Command::new("cmd").args(["/c", "type", ".\\assets\\music.mp3"])
+    } else {
+        Command::new("cat").args(["./assets/music.mp3"])
+    };
+    let reader = StreamDownload::new_process(
+        ProcessStreamParams::new(cmd)?,
         TempStorageProvider::new(),
         Settings::default(),
     )
     .await?;
+    let reader_handle = reader.handle();
 
     let handle = tokio::task::spawn_blocking(move || {
         let (_stream, handle) = rodio::OutputStream::try_default()?;
@@ -45,5 +38,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Ok::<_, Box<dyn Error + Send + Sync>>(())
     });
     handle.await??;
+    // Wait for the spawned subprocess to terminate gracefully
+    reader_handle.wait_for_completion().await;
     Ok(())
 }

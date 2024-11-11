@@ -32,6 +32,8 @@ pub mod async_read;
 pub mod http;
 #[cfg(feature = "open-dal")]
 pub mod open_dal;
+#[cfg(feature = "process")]
+pub mod process;
 mod settings;
 pub mod source;
 pub mod storage;
@@ -44,6 +46,9 @@ pub struct StreamHandle {
 
 impl StreamHandle {
     /// Wait for the stream download task to complete.
+    ///
+    /// This method can be useful when using a [`ProcessStream`][process::ProcessStream] if you want
+    /// to ensure the subprocess has exited cleanly before continuing.
     pub async fn wait_for_completion(self) {
         self.finished.cancelled().await;
     }
@@ -266,6 +271,16 @@ impl<P: StorageProvider> StreamDownload<P> {
         Self::new(params, storage_provider, settings).await
     }
 
+    /// Creates a new [`StreamDownload`] that uses a [`Command`][process::Command] as input.
+    #[cfg(feature = "process")]
+    pub async fn new_process(
+        params: process::ProcessStreamParams,
+        storage_provider: P,
+        settings: Settings<process::ProcessStream>,
+    ) -> Result<Self, StreamInitializationError<process::ProcessStream>> {
+        Self::new(params, storage_provider, settings).await
+    }
+
     /// Creates a new [`StreamDownload`] that accesses a remote resource at the given URL.
     ///
     /// # Example
@@ -305,7 +320,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     /// }
     /// ```
     pub async fn new<S>(
-        url: S::Params,
+        params: S::Params,
         storage_provider: P,
         settings: Settings<S>,
     ) -> Result<Self, StreamInitializationError<S>>
@@ -313,7 +328,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         S: SourceStream,
         S::Error: Debug + Send,
     {
-        Self::from_create_stream(move || S::create(url), storage_provider, settings).await
+        Self::from_create_stream(move || S::create(params), storage_provider, settings).await
     }
 
     /// Creates a new [`StreamDownload`] from a [`SourceStream`].

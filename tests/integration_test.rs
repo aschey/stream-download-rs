@@ -15,6 +15,7 @@ use setup::{SERVER_ADDR, SERVER_RT};
 use stream_download::async_read::AsyncReadStreamParams;
 use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
+use stream_download::process::{self, ProcessStreamParams};
 use stream_download::source::{DecodeError, SourceStream};
 use stream_download::storage::StorageProvider;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
@@ -830,28 +831,42 @@ fn bounded_seek_near_beginning() {
         .unwrap();
         let mut rx = handle.await.unwrap();
         let mut prev_size = 0;
-        while let Some((command, responder)) = rx.recv().await {
-            if let Command::NextChunk(size) = command {
-                let mut temp_buf = vec![0; size - prev_size];
-                reader.read_exact(&mut temp_buf).unwrap();
 
-                if size > bounded_size {
-                    // After reading past the buffer size, seek to the beginning.
-                    // This should produce an error since we're attempting to read past the
-                    // available buffer.
-                    reader.rewind().unwrap();
-                    let mut temp_buf = vec![0; size - prev_size];
-                    if let Err(e) = reader.read(&mut temp_buf) {
-                        assert_eq!(io::ErrorKind::InvalidInput, e.kind());
-                    } else {
-                        panic!("should've errored");
+        spawn_blocking(move || {
+            while let Some((command, responder)) = rx.blocking_recv() {
+                responder.send(Duration::from_millis(0)).unwrap();
+                if let Command::NextChunk(size) = command {
+                    let buf_size = size - prev_size;
+                    let mut temp_buf = vec![0; buf_size];
+
+                    let mut read = 0;
+                    loop {
+                        let new_read = reader.read(&mut temp_buf).unwrap();
+                        read += new_read;
+                        if new_read == 0 || read == buf_size {
+                            break;
+                        }
                     }
-                    return;
+
+                    if size > bounded_size {
+                        // After reading past the buffer size, seek to the beginning.
+                        // This should produce an error since we're attempting to read past the
+                        // available buffer.
+                        reader.rewind().unwrap();
+                        let mut temp_buf = vec![0; buf_size];
+                        if let Err(e) = reader.read(&mut temp_buf) {
+                            assert_eq!(io::ErrorKind::InvalidInput, e.kind());
+                        } else {
+                            panic!("should've errored");
+                        }
+                        return;
+                    }
+                    prev_size = size;
                 }
-                prev_size = size;
             }
-            responder.send(Duration::from_millis(0)).unwrap();
-        }
+        })
+        .await
+        .unwrap();
     });
 }
 
@@ -1311,6 +1326,57 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
 async fn async_read_file() {
     let mut reader = StreamDownload::new_async_read(
         AsyncReadStreamParams::new(tokio::fs::File::open("./assets/music.mp3").await.unwrap()),
+        MemoryStorageProvider,
+        Settings::default(),
+    )
+    .await
+    .unwrap();
+    spawn_blocking(move || {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        compare(get_file_buf(), buf);
+    })
+    .await
+    .unwrap();
+}
+
+// On Windows, passing raw byte streams between pipes without the shell messing with the encoding
+// only works in very specific circumstances.
+// Invoking cmd rather than pwsh or powershell is the only thing that seems to work here.
+// I'm guessing this has to do with how it detects which programs are "native".
+// See https://stackoverflow.com/questions/62835179/how-do-i-pipe-a-byte-stream-to-from-an-external-command
+#[tokio::test]
+async fn process() {
+    let cmd = if cfg!(windows) {
+        process::Command::new("cmd").args(["/c", "type", ".\\assets\\music.mp3"])
+    } else {
+        process::Command::new("cat").args(["./assets/music.mp3"])
+    };
+    let mut reader = StreamDownload::new_process(
+        ProcessStreamParams::new(cmd).unwrap(),
+        MemoryStorageProvider,
+        Settings::default(),
+    )
+    .await
+    .unwrap();
+    spawn_blocking(move || {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).unwrap();
+        compare(get_file_buf(), buf);
+    })
+    .await
+    .unwrap();
+}
+
+// The trick for Windows mentioned above doesn't seem to work with multiple piped commands
+#[cfg(not(windows))]
+#[tokio::test]
+async fn process_piped() {
+    let cmd =
+        process::CommandBuilder::new(process::Command::new("cat").args(["./assets/music.mp3"]))
+            .pipe(process::Command::new("cat"));
+    let mut reader = StreamDownload::new_process(
+        ProcessStreamParams::new(cmd).unwrap(),
         MemoryStorageProvider,
         Settings::default(),
     )

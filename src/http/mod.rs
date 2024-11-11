@@ -186,7 +186,7 @@ pub struct HttpStream<C: Client> {
 }
 
 impl<C: Client> HttpStream<C> {
-    /// Creates a new [HttpStream] from a [Client].
+    /// Creates a new [`HttpStream`] from a [`Client`].
     #[instrument(skip(client, url), fields(url = url.to_string()))]
     pub async fn new(
         client: C,
