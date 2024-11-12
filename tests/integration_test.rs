@@ -1359,6 +1359,7 @@ async fn process() {
     )
     .await
     .unwrap();
+    let handle = reader.handle();
     spawn_blocking(move || {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
@@ -1366,6 +1367,7 @@ async fn process() {
     })
     .await
     .unwrap();
+    handle.wait_for_completion().await;
 }
 
 // The trick for Windows mentioned above doesn't seem to work with multiple piped commands
@@ -1382,6 +1384,7 @@ async fn process_piped() {
     )
     .await
     .unwrap();
+    let handle = reader.handle();
     spawn_blocking(move || {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
@@ -1389,4 +1392,5 @@ async fn process_piped() {
     })
     .await
     .unwrap();
+    handle.wait_for_completion().await;
 }

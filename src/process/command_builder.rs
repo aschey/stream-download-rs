@@ -56,7 +56,7 @@ impl SpawnCommand for CommandBuilder {
             {
                 // CREATE_NO_WINDOW
                 use std::os::windows::process::CommandExt;
-                command.creation_flags(0x08000000);
+                std_command.creation_flags(0x08000000);
             }
 
             if let Some(prev_stdout) = prev_stdout.take() {

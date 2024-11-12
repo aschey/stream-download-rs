@@ -60,6 +60,7 @@ testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
 opendal = { version = "0.50.0", features = ["services-s3", "services-http"] }
 aws-sdk-s3 = "1.29.0"
 reqwest-retry = "0.6.1"
+youtube_dl = { version = "0.10.0", features = ["tokio"] }
 
 [[example]]
 name = "basic_http"
@@ -113,6 +114,16 @@ doc-scrape-examples = true
 
 [[example]]
 name = "custom_process"
+required-features = ["process"]
+doc-scrape-examples = true
+
+[[example]]
+name = "youtube_simple"
+required-features = ["process"]
+doc-scrape-examples = true
+
+[[example]]
+name = "yt_dlp"
 required-features = ["process"]
 doc-scrape-examples = true
 

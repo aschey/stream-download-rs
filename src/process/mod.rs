@@ -1,5 +1,5 @@
-//! A [`SourceStream`] adapter for external processes. This is a wrapper on top of the
-//! [`async_read`][crate::async_read] module.
+//! A [`SourceStream`] adapter for reading data from external processes. This is a wrapper on top of
+//! the [`async_read`][crate::async_read] module.
 //!
 //! Due to limitations with reading `stdout` and `stderr` simultaneously while piping large amounts
 //! of data to `stdin` (see [`std::process::Stdio::piped`]), the child process' `stderr` handle
@@ -8,6 +8,9 @@
 //!
 //! This implementation makes the assumption that any commands used will output binary data to
 //! `stdout` and any error messages will be logged to `stderr`.
+//!
+//! Helpers for interacting with `yt-dlp` for extracting media from specific sites and `ffmpeg` for
+//! post-processing are also included.
 
 use std::convert::Infallible;
 use std::ffi::OsString;
@@ -19,16 +22,20 @@ use std::task::Poll;
 
 use bytes::Bytes;
 pub use command_builder::*;
+pub use ffmpeg::*;
 use futures::Stream;
 use tap::TapFallible;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, warn};
+pub use yt_dlp::*;
 
 use crate::WrapIoResult;
 use crate::async_read::AsyncReadStream;
 use crate::source::{SourceStream, StreamOutcome};
 
 mod command_builder;
+mod ffmpeg;
+mod yt_dlp;
 
 /// Trait used by objects that can spawn a command suitable for use with a [`ProcessStream`].
 pub trait SpawnCommand {
@@ -201,6 +208,8 @@ impl ProcessStream {
             let _ = file
                 .flush()
                 .tap_err(|e| error!("error flushing file: {e:?}"));
+            // Need to reopen the file to access the contents since it was written to from an
+            // external process
             if let Ok(mut file_handle) = file
                 .reopen()
                 .tap_err(|e| error!("error opening file: {e:?}"))
