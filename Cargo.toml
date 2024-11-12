@@ -42,6 +42,7 @@ reqwest-middleware = ["reqwest", "dep:reqwest-middleware"]
 temp-storage = ["dep:tempfile"]
 open-dal = ["dep:opendal", "dep:pin-project-lite", "tokio-util/compat"]
 async-read = ["tokio-util/io"]
+process = ["tokio/process", "async-read", "dep:tempfile"]
 
 [dev-dependencies]
 rodio = { version = "0.20.1", default-features = false, features = [
@@ -108,6 +109,11 @@ doc-scrape-examples = true
 [[example]]
 name = "stdin"
 required-features = ["async-read"]
+doc-scrape-examples = true
+
+[[example]]
+name = "custom_process"
+required-features = ["process"]
 doc-scrape-examples = true
 
 [package.metadata.docs.rs]

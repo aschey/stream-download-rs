@@ -24,6 +24,15 @@ use crate::{ProgressFn, ReconnectFn, Settings, StreamPhase, StreamState};
 
 pub(crate) mod handle;
 
+/// Enum representing the final outcome of the stream.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StreamOutcome {
+    /// The stream completed naturally.
+    Completed,
+    /// The stream was cancelled by the user.
+    CancelledByUser,
+}
+
 /// Represents a remote resource that can be streamed over the network. Streaming
 /// over http is implemented via the [`HttpStream`](crate::http::HttpStream)
 /// implementation if the `http` feature is enabled.
@@ -61,22 +70,28 @@ pub trait SourceStream:
         &mut self,
         start: u64,
         end: Option<u64>,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+    ) -> impl Future<Output = io::Result<()>> + Send;
 
-    /// Attempt to reconnect to the server when a failure occurs.
-    fn reconnect(
-        &mut self,
-        current_position: u64,
-    ) -> impl Future<Output = Result<(), io::Error>> + Send;
+    /// Attempts to reconnect to the server when a failure occurs.
+    fn reconnect(&mut self, current_position: u64) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Returns whether seeking is supported in the stream.
     /// If this method returns `false`, [`SourceStream::seek_range`] will never be invoked.
     fn supports_seek(&self) -> bool;
+
+    /// Called when the stream finishes downloading
+    fn on_finish(
+        &mut self,
+        result: io::Result<()>,
+        #[allow(unused)] outcome: StreamOutcome,
+    ) -> impl Future<Output = io::Result<()>> + Send {
+        future::ready(result)
+    }
 }
 
 /// Trait for decoding extra error information asynchronously.
 pub trait DecodeError: Error + Send + Sized {
-    /// Decode extra error information.
+    /// Decodes extra error information.
     fn decode_error(self) -> impl Future<Output = String> + Send {
         future::ready(self.to_string())
     }
@@ -150,15 +165,28 @@ where
     #[instrument(skip_all)]
     pub(crate) async fn download(&mut self, mut stream: S) {
         let res = self.download_inner(&mut stream).await;
-
+        let (res, stream_res) = match res {
+            Ok(StreamOutcome::Completed) => (Ok(()), StreamOutcome::Completed),
+            Ok(StreamOutcome::CancelledByUser) => (
+                Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "stream cancelled by user",
+                )),
+                StreamOutcome::CancelledByUser,
+            ),
+            Err(e) => (Err(e), StreamOutcome::Completed),
+        };
+        let res = stream.on_finish(res, stream_res).await;
         if let Err(e) = res {
-            error!("download failed: {e:?}");
+            if stream_res == StreamOutcome::Completed {
+                error!("download failed: {e:?}");
+            }
             self.download_status.set_failed();
         }
         self.signal_download_complete();
     }
 
-    async fn download_inner(&mut self, stream: &mut S) -> io::Result<()> {
+    async fn download_inner(&mut self, stream: &mut S) -> io::Result<StreamOutcome> {
         debug!("starting file download");
         let download_start = std::time::Instant::now();
 
@@ -189,14 +217,13 @@ where
                 }
                 () = self.cancellation_token.cancelled() => {
                     debug!("received cancellation request, stopping download task");
-                    return Err(io::Error::new(io::ErrorKind::Interrupted, "stream cancelled by user"));
+                    return Ok(StreamOutcome::CancelledByUser);
                 }
             };
         }
         self.report_download_complete(stream, download_start)?;
-        Ok(())
+        Ok(StreamOutcome::Completed)
     }
-
     async fn handle_seek(&mut self, stream: &mut S, position: &Option<u64>) -> io::Result<()> {
         let position = position.expect("seek_tx dropped");
         if self.should_seek(stream, position)? {
