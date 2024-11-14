@@ -47,11 +47,18 @@ cargo add stream-download
   [Apache OpenDAL](https://crates.io/crates/opendal) as the backend.
 - `async-read` - adds a `SourceStream` implementation for any type implementing
   [`AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html).
+- `process` - adds a `SourceStream` implementation for external processes. Also
+  enables the `async-read` feature.
 - `temp-storage` - adds a temporary file-based storage backend (enabled by
   default).
 
-One of `reqwest-native-tls` or `reqwest-rustls` is required if you wish to use
-https streams.
+**NOTE**: One of `reqwest-native-tls` or `reqwest-rustls` is required if you
+wish to use HTTPS streams.
+
+`reqwest` exposes additional TLS-related feature flags beyond the two that we
+re-export. If you want greater control over the TLS configuration, add a direct
+dependency on `reqwest` and enable the
+[features](https://docs.rs/reqwest/latest/reqwest/#optional-features) you need.
 
 ## Usage
 
@@ -106,14 +113,17 @@ trait. A few types of transports are provided out of the box:
 - [`async_read`](https://docs.rs/stream-download/latest/stream_download/async_read)
   for any source implementing
   [`AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html).
+- [`process`](https://docs.rs/stream-download/latest/stream_download/process)
+  for reading data from
+  [an external process](https://docs.rs/tokio/latest/tokio/process/index.html).
 
 Only `http` is enabled by default. You can provide a custom transport by
 implementing `SourceStream` yourself.
 
 ## Streams with Unknown Length
 
-Resources such as standalone songs or videos have a finite length that we use to
-support certain seeking functionality. Infinite streams or those that otherwise
+Resources such as standalone songs or videos have a finite length that is used
+to support certain seeking functionality. Live streams or those that otherwise
 don't have a known length are still supported, but attempting to seek from the
 end of the stream will return an error. This may cause issues with certain audio
 or video libraries that attempt to perform such seek operations. If it's
@@ -169,6 +179,24 @@ If you're using this library to handle Icecast streams or one if its
 derivatives, check out the [icy-metadata](https://crates.io/crates/icy-metadata)
 crate. There are examples for how to use it with `stream-download`
 [in the repo](https://github.com/aschey/icy-metadata/tree/main/examples).
+
+## Streaming from YouTube and Similar Sites
+
+Some websites with embedded audio or video streams can be tricky to handle
+directly. For these cases, it's easier to use a dedicated program such as
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) which can parse media from specific
+websites (it supports more websites than just YouTube, despite the name). If you
+enable the `process` feature, you can integrate with external programs like
+`yt-dlp` that can send their output to `stdout`. Some helpers for interacting
+with `yt-dlp` and `ffmpeg` (for post-processing) are also included.
+
+See
+[youtube_simple](https://github.com/aschey/stream-download-rs/blob/main/examples/youtube_simple.rs)
+for a simple way to stream audio from a YouTube video.
+
+See
+[yt_dlp](https://github.com/aschey/stream-download-rs/blob/main/examples/yt_dlp.rs)
+for a more complex example of handling different kinds of URLs with `yt-dlp`.
 
 ## Storage
 

@@ -11,7 +11,7 @@ pub mod temp;
 /// Creates a [`StorageReader`] and [`StorageWriter`] based on the content
 /// length returned from the [`SourceStream`](crate::source::SourceStream).
 /// The reader and writer must track their position in the stream independently.
-pub trait StorageProvider: Clone + Send {
+pub trait StorageProvider: Send {
     /// Source used to read from the underlying storage.
     type Reader: StorageReader;
     /// Handle that can write to the underlying storage.
