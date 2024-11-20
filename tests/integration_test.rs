@@ -1355,7 +1355,7 @@ async fn process() {
     let mut reader = StreamDownload::new_process(
         ProcessStreamParams::new(cmd).unwrap(),
         MemoryStorageProvider,
-        Settings::default(),
+        Settings::default().cancel_on_drop(false),
     )
     .await
     .unwrap();
@@ -1380,7 +1380,7 @@ async fn process_piped() {
     let mut reader = StreamDownload::new_process(
         ProcessStreamParams::new(cmd).unwrap(),
         MemoryStorageProvider,
-        Settings::default(),
+        Settings::default().cancel_on_drop(false),
     )
     .await
     .unwrap();

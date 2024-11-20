@@ -272,6 +272,36 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     /// Creates a new [`StreamDownload`] that uses a [`Command`][process::Command] as input.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    /// use std::io::{self, Read};
+    /// use std::result::Result;
+    ///
+    /// use stream_download::process::{Command, ProcessStreamParams};
+    /// use stream_download::storage::temp::TempStorageProvider;
+    /// use stream_download::{Settings, StreamDownload};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut reader = StreamDownload::new_process(
+    ///         ProcessStreamParams::new(Command::new("cat").args(["./assets/music.mp3"]))?,
+    ///         TempStorageProvider::new(),
+    ///         Settings::default(),
+    ///     )
+    ///     .await?;
+    ///
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
+    ///     Ok(())
+    /// }
+    /// ```
     #[cfg(feature = "process")]
     pub async fn new_process(
         params: process::ProcessStreamParams,
