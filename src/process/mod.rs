@@ -7,7 +7,9 @@
 //! explicitly overridden with [`Command::stderr_handle`].
 //!
 //! This implementation makes the assumption that any commands used will output binary data to
-//! `stdout` and any error messages will be logged to `stderr`.
+//! `stdout` and any error messages will be logged to `stderr`. You probably want to disable
+//! [`Settings::cancel_on_drop`][crate::Settings::cancel_on_drop] when using this module in order
+//! to ensure all error messages are flushed before the process is stopped.
 //!
 //! Helpers for interacting with `yt-dlp` for extracting media from specific sites and `ffmpeg` for
 //! post-processing are also included.

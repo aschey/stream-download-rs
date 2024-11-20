@@ -64,7 +64,7 @@ impl<S> Default for Settings<S> {
             prefetch_bytes: 256 * 1024,
             seek_buffer_size: 128,
             retry_timeout: Duration::from_secs(5),
-            cancel_on_drop: false,
+            cancel_on_drop: true,
             on_progress: None,
             on_reconnect: None,
         }
@@ -115,7 +115,10 @@ impl<S> Settings<S> {
     }
 
     /// If set to `true`, this will cause the stream download task to automatically cancel when the
-    /// [`StreamDownload`][crate::StreamDownload] instance is dropped.
+    /// [`StreamDownload`][crate::StreamDownload] instance is dropped. It's useful to disable this
+    /// if you want to ensure the stream shuts down cleanly.
+    ///
+    /// The default value is `true`.
     #[must_use]
     pub fn cancel_on_drop(self, cancel_on_drop: bool) -> Self {
         Self {

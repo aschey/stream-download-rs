@@ -84,10 +84,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let builder = CommandBuilder::new(cmd).pipe(FfmpegConvertAudioCommand::new(ffmpeg_format));
         ProcessStreamParams::new(builder)?
     };
-
-    // Sometimes it may take a while for ffmpeg to output a new chunk, so we can bump up the retry
-    // timeout to be safe.
-    let settings = Settings::default().retry_timeout(Duration::from_secs(30));
+    let settings = Settings::default()
+        // Sometimes it may take a while for ffmpeg to output a new chunk, so we can bump up the
+        // retry timeout to be safe.
+        .retry_timeout(Duration::from_secs(30))
+        // Disable cancel_on_drop to ensure no error messages from the process are lost.
+        .cancel_on_drop(false);
     let reader = StreamDownload::new_process(
         params,
         AdaptiveStorageProvider::new(

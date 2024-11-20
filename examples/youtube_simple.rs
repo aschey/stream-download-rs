@@ -35,7 +35,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let reader = StreamDownload::new_process(
         ProcessStreamParams::new(cmd)?.content_length(size),
         TempStorageProvider::new(),
-        Settings::default(),
+        // Disable cancel_on_drop to ensure no error messages from the process are lost.
+        Settings::default().cancel_on_drop(false),
     )
     .await?;
     let reader_handle = reader.handle();
