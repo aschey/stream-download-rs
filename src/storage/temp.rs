@@ -1,6 +1,7 @@
 //! Storage implementations for reading and writing to a temporary file. If the content length is
 //! known, the buffer size will be initialized to the content length, but the buffer will expand
 //! beyond that if required.
+
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::File;

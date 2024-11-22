@@ -34,6 +34,8 @@ pub mod http;
 pub mod open_dal;
 #[cfg(feature = "process")]
 pub mod process;
+#[cfg(feature = "registry")]
+pub mod registry;
 mod settings;
 pub mod source;
 pub mod storage;
