@@ -1,5 +1,6 @@
 //! Configurable implementations for the buffer's storage layer.
 //! Pre-configured implementations are available for memory and temporary file-based storage.
+
 use std::io::{self, Read, Seek, Write};
 
 pub mod adaptive;

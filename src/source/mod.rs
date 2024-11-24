@@ -1,5 +1,6 @@
 //! Provides the [`SourceStream`] trait which abstracts over the transport used to
 //! stream remote content.
+
 use std::convert::Infallible;
 use std::error::Error;
 use std::fmt::Debug;

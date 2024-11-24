@@ -17,6 +17,7 @@
 //! If your inputs may or may not have a known content length, consider using an
 //! [`AdaptiveStorageProvider`](super::adaptive::AdaptiveStorageProvider) to automatically
 //! determine whether or not the overhead of maintaining a bounded buffer is necessary.
+
 use std::fmt::Debug;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;

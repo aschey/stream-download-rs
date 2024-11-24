@@ -10,8 +10,14 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-patch"]
-      # tokio is quite stable, we don't need to update every minor version
+      # ignore minor updates for stable crates that have reached 1.0
       - dependency-name: "tokio"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "url"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "bytes"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "thiserror"
         update-types: ["version-update:semver-minor"]
   - package-ecosystem: "github-actions"
     directory: "/"

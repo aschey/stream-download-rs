@@ -1,6 +1,7 @@
 //! Storage implementations for reading and writing to an in-memory buffer. If the content length is
 //! known, the buffer size will be initialized to the content length, but the buffer will expand
 //! beyond that if required.
+
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

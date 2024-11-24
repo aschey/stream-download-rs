@@ -51,6 +51,8 @@ cargo add stream-download
   enables the `async-read` feature.
 - `temp-storage` - adds a temporary file-based storage backend (enabled by
   default).
+- `registry` - adds a method for routing inputs to different stream handlers
+  based on a set of rules.
 
 **NOTE**: One of `reqwest-native-tls` or `reqwest-rustls` is required if you
 wish to use HTTPS streams.
@@ -197,6 +199,20 @@ for a simple way to stream audio from a YouTube video.
 See
 [yt_dlp](https://github.com/aschey/stream-download-rs/blob/main/examples/yt_dlp.rs)
 for a more complex example of handling different kinds of URLs with `yt-dlp`.
+
+## Registry
+
+Some applications may need to use multiple types of stream handlers. For
+example, you may want to handle YouTube URLs with `yt-dlp`, normal HTTP URLs
+with `reqwest`, and `file://` URLs with a simple
+[`BufReader`](https://doc.rust-lang.org/std/io/struct.BufReader.html). You can
+use a
+[`registry`](https://docs.rs/stream-download/latest/stream_download/registry/index.html)
+to handle these cases.
+
+See the
+[example](https://github.com/aschey/stream-download-rs/blob/main/examples/registry/main.rs)
+for more info.
 
 ## Storage
 
