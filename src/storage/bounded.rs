@@ -21,6 +21,7 @@
 use std::fmt::Debug;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
 use educe::Educe;
@@ -84,13 +85,13 @@ where
                 "Requested buffer size of {buffer_size} exceeds the maximum value"
             ))?;
 
-        let shared_info = Arc::new(Mutex::new(SharedInfo {
+        let shared_info = Arc::new(AssertUnwindSafe(Mutex::new(SharedInfo {
             read: 0,
             written: 0,
             read_position: 0,
             write_position: 0,
             size: buffer_size,
-        }));
+        })));
         let reader = BoundedStorageReader {
             inner: reader,
             shared_info: shared_info.clone(),
@@ -131,7 +132,7 @@ where
 {
     #[educe(Debug = false)]
     inner: T,
-    shared_info: Arc<Mutex<SharedInfo>>,
+    shared_info: Arc<AssertUnwindSafe<Mutex<SharedInfo>>>,
 }
 
 impl<T> Read for BoundedStorageReader<T>
@@ -179,6 +180,7 @@ where
         let size = shared_info.size.min(shared_info.write_position);
 
         let start = shared_info.mapped_read_position(0);
+        // is_empty check above prevents subtraction with overflow here
         let end = shared_info.mapped_read_position(buf.len().min(available_len) - 1) + 1;
         trace!(
             start,
@@ -258,7 +260,7 @@ where
 {
     #[educe(Debug = false)]
     inner: T,
-    shared_info: Arc<Mutex<SharedInfo>>,
+    shared_info: Arc<AssertUnwindSafe<Mutex<SharedInfo>>>,
 }
 
 impl<T> Write for BoundedStorageWriter<T>
@@ -279,6 +281,7 @@ where
         }
 
         let start = shared_info.mapped_write_position(0);
+        // is_empty check above prevents subtraction with overflow here
         let end = shared_info.mapped_write_position(buf.len() - 1) + 1;
         trace!(
             start,
