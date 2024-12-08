@@ -79,6 +79,7 @@ pub struct StreamDownload<P: StorageProvider> {
     handle: SourceHandle,
     download_task_cancellation_token: CancellationToken,
     cancel_on_drop: bool,
+    content_length: Option<u64>,
 }
 
 impl<P: StorageProvider> StreamDownload<P> {
@@ -473,6 +474,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             handle,
             download_task_cancellation_token: cancellation_token,
             cancel_on_drop,
+            content_length,
         })
     }
 
@@ -506,6 +508,15 @@ impl<P: StorageProvider> StreamDownload<P> {
         });
         self.handle.notify_read();
         res
+    }
+
+    fn normalize_requested_position(&self, requested_position: u64) -> u64 {
+        if let Some(content_length) = self.content_length {
+            // ensure we don't request a position beyond the end of the stream
+            requested_position.min(content_length)
+        } else {
+            requested_position
+        }
     }
 
     fn check_for_failure(&self) -> io::Result<()> {
@@ -550,13 +561,14 @@ impl<P: StorageProvider> Drop for StreamDownload<P> {
 }
 
 impl<P: StorageProvider> Read for StreamDownload<P> {
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(len=buf.len()))]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.check_for_failure()?;
 
         trace!(buffer_length = buf.len(), "read requested");
         let stream_position = self.output_reader.stream_position()?;
-        let requested_position = stream_position + buf.len() as u64;
+        let requested_position =
+            self.normalize_requested_position(stream_position + buf.len() as u64);
         trace!(
             current_position = stream_position,
             requested_position = requested_position
@@ -601,6 +613,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
         self.check_for_failure()?;
 
         let absolute_seek_position = self.get_absolute_seek_position(relative_position)?;
+        let absolute_seek_position = self.normalize_requested_position(absolute_seek_position);
 
         debug!(absolute_seek_position, "absolute seek position");
         if let Some(closest_set) = self
