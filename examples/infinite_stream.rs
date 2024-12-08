@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 use std::num::NonZeroUsize;
 
@@ -22,10 +23,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
-    let stream = HttpStream::<Client>::create(
-        "https://us2.internet-radio.com/proxy/mattjohnsonradio?mp=/stream".parse()?,
-    )
-    .await?;
+    let url = args().nth(1).unwrap_or_else(|| {
+        "https://us2.internet-radio.com/proxy/mattjohnsonradio?mp=/stream".to_string()
+    });
+
+    let stream = HttpStream::<Client>::create(url.parse()?).await?;
 
     info!("content type={:?}", stream.content_type());
     let bitrate: u64 = stream.header("Icy-Br").unwrap().parse()?;

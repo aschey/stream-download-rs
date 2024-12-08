@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 
 use stream_download::process::{ProcessStreamParams, YtDlpCommand};
@@ -16,11 +17,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
-    let url = "https://www.youtube.com/watch?v=L_XJ_s5IsQc";
+    let url = args()
+        .nth(1)
+        .unwrap_or_else(|| "https://www.youtube.com/watch?v=L_XJ_s5IsQc".to_string());
+
     let format = "m4a";
 
     info!("extracting video metadata - this may take a few seconds");
-    let output = YoutubeDl::new(url)
+    let output = YoutubeDl::new(&url)
         .format(format)
         .extract_audio(true)
         .run_async()
