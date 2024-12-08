@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 
 use reqwest_retry::RetryTransientMiddleware;
@@ -15,6 +16,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
+    let url = args().nth(1).unwrap_or_else(|| {
+        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No \
+         6 - Movement 2 Un poco andante.MP3"
+            .to_string()
+    });
+
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
 
     // Instead of adding middleware globally like we do here, you can also create the client
@@ -23,9 +30,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Settings::add_default_middleware(RetryTransientMiddleware::new_with_policy(retry_policy));
 
     let reader = match StreamDownload::new_http_with_middleware(
-        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
-         No 6 - Movement 2 Un poco andante.MP3"
-            .parse()?,
+        url.parse()?,
         TempStorageProvider::new(),
         Settings::default(),
     )

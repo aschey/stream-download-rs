@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 use std::time::Instant;
 
@@ -21,11 +22,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
+    let url = args().nth(1).unwrap_or_else(|| {
+        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No \
+         6 - Movement 2 Un poco andante.MP3"
+            .to_string()
+    });
+
     let mut last_event = Instant::now();
     let reader = match StreamDownload::new_http(
-        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
-         No 6 - Movement 2 Un poco andante.MP3"
-            .parse()?,
+        url.parse()?,
         TempStorageProvider::new(),
         Settings::default().on_progress(move |stream: &HttpStream<_>, state, _| {
             let now = Instant::now();

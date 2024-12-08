@@ -102,6 +102,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
 
+Most of the examples use audio streams, but this crate has no logic that
+restricts usage to any specific media type.
+
 ## Transports
 
 Transports implement the
@@ -138,8 +141,8 @@ use std::io;
 use std::io::Read;
 use std::result::Result;
 
-use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
+use stream_download::http::reqwest::Client;
 use stream_download::source::DecodeError;
 use stream_download::source::SourceStream;
 use stream_download::storage::temp::TempStorageProvider;

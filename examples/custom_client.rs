@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 use std::time::Instant;
 
@@ -65,15 +66,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
+    let url = args().nth(1).unwrap_or_else(|| {
+        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No \
+         6 - Movement 2 Un poco andante.MP3"
+            .to_string()
+    });
+
     // Note: you may want to consider creating middleware using `reqwest-middleware` instead of a
     // custom client as shown here.
     // See https://docs.rs/reqwest-middleware/latest/reqwest_middleware.
-    let stream = HttpStream::<BearerAuthClient>::create(
-        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
-         No 6 - Movement 2 Un poco andante.MP3"
-            .parse()?,
-    )
-    .await?;
+    let stream = HttpStream::<BearerAuthClient>::create(url.parse()?).await?;
 
     info!("content length={:?}", stream.content_length());
     info!("content type={:?}", stream.content_type());

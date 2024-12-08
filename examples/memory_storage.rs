@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 
 use stream_download::source::DecodeError;
@@ -13,18 +14,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
-    let reader = match StreamDownload::new_http(
-        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
-         No 6 - Movement 2 Un poco andante.MP3"
-            .parse()?,
-        MemoryStorageProvider,
-        Settings::default(),
-    )
-    .await
-    {
-        Ok(reader) => reader,
-        Err(e) => return Err(e.decode_error().await)?,
-    };
+    let url = args().nth(1).unwrap_or_else(|| {
+        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No \
+         6 - Movement 2 Un poco andante.MP3"
+            .to_string()
+    });
+
+    let reader =
+        match StreamDownload::new_http(url.parse()?, MemoryStorageProvider, Settings::default())
+            .await
+        {
+            Ok(reader) => reader,
+            Err(e) => return Err(e.decode_error().await)?,
+        };
 
     let handle = tokio::task::spawn_blocking(move || {
         let (_stream, handle) = rodio::OutputStream::try_default()?;
