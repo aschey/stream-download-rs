@@ -65,10 +65,11 @@ opendal = { version = "0.50.0", features = ["services-s3", "services-http"] }
 aws-sdk-s3 = "1.29.0"
 reqwest-retry = "0.7.0"
 youtube_dl = { version = "0.10.0", features = ["tokio"] }
+libmpv2 = "4.1.0"
 
 [[example]]
 name = "basic_http"
-required-features = ["reqwest"]
+required-features = ["reqwest", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
@@ -83,6 +84,11 @@ doc-scrape-examples = true
 
 [[example]]
 name = "from_stream"
+required-features = ["reqwest", "temp-storage"]
+doc-scrape-examples = true
+
+[[example]]
+name = "video_mpv"
 required-features = ["reqwest", "temp-storage"]
 doc-scrape-examples = true
 
@@ -103,32 +109,37 @@ doc-scrape-examples = true
 
 [[example]]
 name = "retry_middleware"
-required-features = ["reqwest-middleware"]
+required-features = ["reqwest-middleware", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
 name = "s3"
-required-features = ["open-dal"]
+required-features = ["open-dal", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
 name = "stdin"
-required-features = ["async-read"]
+required-features = ["async-read", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
 name = "custom_process"
-required-features = ["process"]
+required-features = ["process", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
 name = "youtube_simple"
-required-features = ["process"]
+required-features = ["process", "temp-storage"]
 doc-scrape-examples = true
 
 [[example]]
 name = "yt_dlp"
-required-features = ["process"]
+required-features = ["process", "temp-storage"]
+doc-scrape-examples = true
+
+[[example]]
+name = "registry"
+required-features = ["registry", "reqwest", "process", "temp-storage"]
 doc-scrape-examples = true
 
 [package.metadata.docs.rs]

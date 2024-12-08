@@ -1,3 +1,4 @@
+use std::env::args;
 use std::error::Error;
 use std::time::Duration;
 
@@ -19,6 +20,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_file(true)
         .init();
 
+    let url = args().nth(1).unwrap_or_else(|| {
+        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 No \
+         6 - Movement 2 Un poco andante.MP3"
+            .to_string()
+    });
+
     // If you need to add some custom options to your HTTP client,
     // construct it manually and pass it into `HttpStream::new`.
     let mut headers = HeaderMap::new();
@@ -36,14 +43,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .default_headers(headers)
         .build()?;
 
-    let stream = match HttpStream::new(
-        client,
-        "http://www.hyperion-records.co.uk/audiotest/14 Clementi Piano Sonata in D major, Op 25 \
-         No 6 - Movement 2 Un poco andante.MP3"
-            .parse()?,
-    )
-    .await
-    {
+    let stream = match HttpStream::new(client, url.parse()?).await {
         Ok(stream) => stream,
         Err(e) => return Err(e.decode_error().await)?,
     };
