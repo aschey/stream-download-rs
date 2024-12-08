@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::ops::Range;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::Instant;
@@ -95,8 +96,12 @@ struct Waiter {
     stream_done: bool,
 }
 
+// parking_lot's synchronization primitive's aren't unwind safe: https://github.com/Amanieu/parking_lot/issues/32
+// Libraries that use FFI sometimes require these traits, which can cause compilation failures for
+// anything that tries to hold a reference to this struct.
+// Here we can use AssertUnwindSafe as long as we ensure we don't panic while holding a lock.
 #[derive(Default, Clone, Debug)]
-pub(super) struct PositionReached(Arc<(Mutex<Waiter>, Condvar)>);
+pub(super) struct PositionReached(Arc<(AssertUnwindSafe<Mutex<Waiter>>, Condvar)>);
 
 impl PositionReached {
     pub(super) fn notify_position_reached(&self) {
@@ -134,10 +139,11 @@ impl PositionReached {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(super) struct Downloaded(Arc<RwLock<RangeSet<u64>>>);
+pub(super) struct Downloaded(Arc<AssertUnwindSafe<RwLock<RangeSet<u64>>>>);
 
 impl Downloaded {
     pub(super) fn add(&self, range: Range<u64>) {
+        // explicit check here prevents panic
         if range.end > range.start {
             self.0.write().insert(range);
         }

@@ -3,6 +3,7 @@
 //! beyond that if required.
 
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -31,7 +32,7 @@ impl StorageProvider for MemoryStorageProvider {
                 "Requested buffer size of {initial_buffer_size} exceeds the maximum value"
             ))?;
 
-        let inner = Arc::new(RwLock::new(vec![0; initial_buffer_size]));
+        let inner = Arc::new(AssertUnwindSafe(RwLock::new(vec![0; initial_buffer_size])));
         let written = Arc::new(AtomicUsize::new(0));
         let reader = MemoryStorage {
             inner: inner.clone(),
@@ -50,7 +51,7 @@ impl StorageProvider for MemoryStorageProvider {
 /// Simple thread-safe in-memory buffer that supports the standard IO traits.
 #[derive(Debug)]
 pub struct MemoryStorage {
-    inner: Arc<RwLock<Vec<u8>>>,
+    inner: Arc<AssertUnwindSafe<RwLock<Vec<u8>>>>,
     position: usize,
     written: Arc<AtomicUsize>,
 }

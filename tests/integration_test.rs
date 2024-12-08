@@ -1,5 +1,6 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::num::NonZeroUsize;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::time::Duration;
 use std::{fs, io};
 
@@ -52,6 +53,44 @@ fn new(#[case] prefetch_bytes: u64) {
         .await
         .unwrap();
 
+        assert_unwind_safe(&reader);
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+
+            compare(get_file_buf(), buf);
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(256*1024)]
+#[case(1024*1024)]
+fn new_with_middleware(#[case] prefetch_bytes: u64) {
+    use reqwest_retry::RetryTransientMiddleware;
+    use reqwest_retry::policies::ExponentialBackoff;
+
+    SERVER_RT.get().unwrap().block_on(async move {
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        Settings::add_default_middleware(RetryTransientMiddleware::new_with_policy(retry_policy));
+
+        let mut reader = StreamDownload::new_http_with_middleware(
+            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                .parse()
+                .unwrap(),
+            MemoryStorageProvider,
+            Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+
+        assert_unwind_safe(&reader);
+
         spawn_blocking(move || {
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
@@ -81,6 +120,8 @@ fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] c
         )
         .await
         .unwrap();
+
+        assert_unwind_safe(&reader);
 
         spawn_blocking(move || {
             let mut buf = Vec::new();
@@ -130,6 +171,8 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
         .await
         .unwrap();
 
+        assert_unwind_safe(&reader);
+
         spawn_blocking(move || {
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
@@ -166,6 +209,8 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
         )
         .await
         .unwrap();
+
+        assert_unwind_safe(&reader);
 
         spawn_blocking(move || {
             let mut buf = Vec::new();
@@ -452,11 +497,14 @@ fn retry_stuck_download(
 }
 
 #[rstest]
-fn bounded(
+fn bounded<T>(
     #[values(0, 1, 128*1024-1, 128*1024)] prefetch_bytes: u64,
     #[values(256*1024, 300*1024)] bounded_length: usize,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider,
-) {
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
+) where
+    T: StorageProvider,
+    <T as StorageProvider>::Reader: RefUnwindSafe + UnwindSafe,
+{
     let buf = SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
@@ -494,6 +542,8 @@ fn bounded(
         .await
         .unwrap();
 
+        assert_unwind_safe(&reader);
+
         let (mut rx, prefetch_size) = handle.await.unwrap();
 
         let mut buf = vec![0; prefetch_size];
@@ -515,13 +565,15 @@ fn bounded(
 }
 
 #[rstest]
-fn adaptive(
+fn adaptive<T>(
     #[values(0, 1, 128*1024-1, 128*1024)] prefetch_bytes: u64,
     #[values(256, 1024, 128*1024)] buf_size: usize,
     #[values(true, false)] has_content_length: bool,
-    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
-    + 'static,
-) {
+    #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
+) where
+    T: StorageProvider + 'static,
+    <T as StorageProvider>::Reader: RefUnwindSafe + UnwindSafe,
+{
     let buf = SERVER_RT.get().unwrap().block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
@@ -555,6 +607,9 @@ fn adaptive(
         )
         .await
         .unwrap();
+
+        assert_unwind_safe(&reader);
+
         let buf = spawn_blocking(move || {
             let mut buf = Vec::<u8>::new();
             let mut temp_buf = vec![0; buf_size];
@@ -1111,6 +1166,9 @@ async fn async_read_file() {
     )
     .await
     .unwrap();
+
+    assert_unwind_safe(&reader);
+
     spawn_blocking(move || {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).unwrap();
@@ -1139,6 +1197,9 @@ async fn process() {
     )
     .await
     .unwrap();
+
+    assert_unwind_safe(&reader);
+
     let handle = reader.handle();
     spawn_blocking(move || {
         let mut buf = Vec::new();
@@ -1164,6 +1225,9 @@ async fn process_piped() {
     )
     .await
     .unwrap();
+
+    assert_unwind_safe(&reader);
+
     let handle = reader.handle();
     spawn_blocking(move || {
         let mut buf = Vec::new();
@@ -1173,4 +1237,10 @@ async fn process_piped() {
     .await
     .unwrap();
     handle.wait_for_completion().await;
+}
+
+fn assert_unwind_safe<T>(_t: &T)
+where
+    T: RefUnwindSafe + UnwindSafe,
+{
 }
