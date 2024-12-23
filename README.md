@@ -10,14 +10,16 @@
 ![Lines of Code](https://aschey.tech/tokei/github/aschey/stream-download-rs)
 
 [stream-download](https://github.com/aschey/stream-download-rs) is a library for
-streaming content from a remote location to a local cache and using it as a
+streaming content from a remote location and using it as a
 [`read`](https://doc.rust-lang.org/stable/std/io/trait.Read.html) and
 [`seek`](https://doc.rust-lang.org/stable/std/io/trait.Seek.html)-able source.
-The requested content is downloaded in the background and read or seek
-operations are allowed before the download is finished. Seek operations may
+This is primarily useful for audio or video sources, but this library does not
+make any assumptions about the content type of the data being streamed.
+
+The requested content is downloaded in the background, allowing read and seek
+operations to progress before the download is finished. Seek operations may
 cause the stream to be restarted from the requested position if the download is
-still in progress. This is useful for media applications that need to stream
-large files that may take a long time to download.
+still in progress.
 
 This library makes heavy use of the adapter pattern to allow for pluggable
 transports and storage implementations.
@@ -101,9 +103,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 ## Examples
 
 See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
-
-Most of the examples use audio streams, but this crate has no logic that
-restricts usage to any specific media type.
 
 ## Transports
 
