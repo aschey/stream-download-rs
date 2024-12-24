@@ -35,7 +35,7 @@ use std::task::Poll;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Stream, ready};
-use opendal::{FuturesAsyncReader, Metakey, Operator, Reader};
+use opendal::{FuturesAsyncReader, Operator, Reader};
 use pin_project_lite::pin_project;
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
 use tokio_util::io::poll_read_buf;
@@ -114,13 +114,7 @@ impl OpenDalStream {
     pub async fn new(params: OpenDalStreamParams) -> Result<Self, Error> {
         let stat = params.operator.stat(&params.path).await?;
 
-        let content_length = if stat.metakey().contains(Metakey::ContentLength) {
-            // content_length() will panic if called when the ContentLength Metakey is not present
-            Some(stat.content_length())
-        } else {
-            None
-        };
-
+        let content_length = stat.content_length();
         let content_type = stat.content_type().map(|t| t.to_string());
 
         let reader = params.operator.reader(&params.path).await?;
@@ -132,7 +126,11 @@ impl OpenDalStream {
             reader,
             buf: BytesMut::with_capacity(params.chunk_size),
             capacity: params.chunk_size,
-            content_length,
+            content_length: if content_length > 0 {
+                Some(content_length)
+            } else {
+                None
+            },
             content_type,
         })
     }

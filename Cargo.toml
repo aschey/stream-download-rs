@@ -18,7 +18,7 @@ bytes = "1.6"
 educe = "0.6"
 futures = "0.3"
 mediatype = { version = "0.19", optional = true }
-opendal = { version = ">=0.47,<0.51", optional = true }
+opendal = { version = "0.51", optional = true }
 parking_lot = "0.12.1"
 pin-project-lite = { version = "0.2.9", optional = true }
 rangemap = "1"
@@ -61,7 +61,7 @@ rstest = "0.23.0"
 proptest = "1.4.0"
 axum = "0.7.5"
 testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
-opendal = { version = "0.50.0", features = ["services-s3", "services-http"] }
+opendal = { version = "0.51.0", features = ["services-s3", "services-http"] }
 aws-sdk-s3 = "1.29.0"
 reqwest-retry = "0.7.0"
 youtube_dl = { version = "0.10.0", features = ["tokio"] }
