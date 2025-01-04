@@ -59,7 +59,7 @@ tower = { version = "0.5.0", features = ["make"] }
 ctor = "0.2.7"
 rstest = "0.24.0"
 proptest = "1.4.0"
-axum = "0.7.5"
+axum = "0.8.1"
 testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
 opendal = { version = "0.51.0", features = ["services-s3", "services-http"] }
 aws-sdk-s3 = "1.29.0"
