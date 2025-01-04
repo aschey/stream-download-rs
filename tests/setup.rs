@@ -33,7 +33,7 @@ fn setup() {
 
     SERVER_ADDR.get_or_init(|| listener.local_addr().unwrap());
     let service = ServeDir::new("./assets");
-    let router = Router::new().nest_service("/", service);
+    let router = Router::new().fallback_service(service);
 
     rt.spawn(async move {
         let listener = tokio::net::TcpListener::from_std(listener).unwrap();
