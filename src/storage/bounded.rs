@@ -1,4 +1,5 @@
 //! Storage wrappers for restricting the size of the underlying storage layer.
+//!
 //! This is useful for dealing with infinite streams when you don't want the storage size to keep
 //! growing indefinitely. It can also be used for downloading large files where you want to prevent
 //! allocating too much space at one time.
