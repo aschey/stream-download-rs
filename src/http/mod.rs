@@ -80,6 +80,8 @@ pub trait Client: Send + Sync + Unpin + 'static {
 
     /// Sends an HTTP GET request to the URL utilizing the `Range` header to request a specific part
     /// of the stream.
+    ///
+    /// The end value should be inclusive, per the HTTP spec.
     fn get_range(
         &self,
         url: &Self::Url,
@@ -313,7 +315,8 @@ impl<C: Client> SourceStream for HttpStream<C> {
         let request_start = Instant::now();
         let response = self
             .client
-            .get_range(&self.url, start, end)
+            // seek_range provides an exclusive end value, but we need it to be inclusive here
+            .get_range(&self.url, start, end.map(|e| e - 1))
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
             .wrap_err(&format!("error sending HTTP range request to {}", self.url))?;

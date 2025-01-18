@@ -67,6 +67,8 @@ pub trait SourceStream:
     /// Seeks to a specific position in the stream. This method is only called if the
     /// requested range has not been downloaded, so this method should jump to the
     /// requested position in the stream as quickly as possible.
+    ///
+    /// The start value should be inclusive and the end value should be exclusive.
     fn seek_range(
         &mut self,
         start: u64,
@@ -131,12 +133,12 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     cancellation_token: CancellationToken,
 }
 
-impl<S: SourceStream, H: StorageWriter> Source<S, H>
+impl<S: SourceStream, W: StorageWriter> Source<S, W>
 where
     S::Error: Debug,
 {
     pub(crate) fn new(
-        writer: H,
+        writer: W,
         content_length: Option<u64>,
         settings: Settings<S>,
         cancellation_token: CancellationToken,
