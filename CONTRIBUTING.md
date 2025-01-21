@@ -1,15 +1,14 @@
 # Contribution guidelines
 
-Pull requests are accepted. If you wish to add a nontrivial feature, please
-create an issue first so we can discuss the implementation before creating a
-pull request. Bugfix pull requests are welcome anytime. If adding a new feature,
-please add test coverage as well.
+Pull requests are welcome! If you wish to add a nontrivial feature, please
+create an issue first so we can discuss the implementation. If adding a new
+feature, please add test coverage as well.
 
 ## Git Hooks
 
 We provide git hooks to enforce some lint rules. If you have
 [cargo make](https://github.com/sagiegurari/cargo-make) installed, you can run
-`cargo make install-hooks` or manually copy the hooks from `.githooks` to
+`cargo make install-hooks`. If not, you can copy the hooks from `.githooks` to
 `.git/hooks`.
 
 ## Conventional commits
@@ -20,8 +19,8 @@ for creating changelogs. These are checked using
 hooks, these are checked before commit.
 
 You don't have to use the conventional style for your commits if you don't want
-to, but please make your PR title use it. We squash merge PRs so the PR title
-will be the commit message going into `main`.
+to, but please use it for your PR title. PRs are squash merged so the title will
+be the commit message going into `main`.
 
 ## Formatting
 
@@ -33,5 +32,5 @@ hooks, these are checked before commit.
 
 ## Required Dev Packages
 
-Tests have a transient dependency on the `alsa-sys` crate. That crate needs the
+Tests have a transitive dependency on the `alsa-sys` crate. That crate needs the
 `libasound2-dev` package installed on Debian based systems.
