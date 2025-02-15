@@ -424,8 +424,9 @@ impl<P: StorageProvider> StreamDownload<P> {
         self.download_task_cancellation_token.cancel();
     }
 
-    /// Get the [`CancellationToken`] for the download task.
-    pub fn get_cancellation_token(&self) -> CancellationToken {
+    /// Returns the [`CancellationToken`] for the download task.
+    /// This can be used to cancel the download task before it completes.
+    pub fn cancellation_token(&self) -> CancellationToken {
         self.download_task_cancellation_token.clone()
     }
 
