@@ -437,6 +437,11 @@ impl<P: StorageProvider> StreamDownload<P> {
         }
     }
 
+    /// Returns the content length of the stream, if available.
+    pub fn content_length(&self) -> Option<u64> {
+        self.content_length
+    }
+
     async fn from_create_stream<S, F, Fut>(
         create_stream: F,
         storage_provider: P,
