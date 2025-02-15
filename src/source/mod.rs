@@ -454,15 +454,18 @@ where
         download_start: Instant,
         chunk_size: usize,
     ) {
-        self.report_progress(stream, StreamState {
-            current_position: stream_position,
-            current_chunk: (0..stream_position),
-            elapsed: download_start.elapsed(),
-            phase: StreamPhase::Prefetching {
-                target: self.prefetch_bytes,
-                chunk_size,
+        self.report_progress(
+            stream,
+            StreamState {
+                current_position: stream_position,
+                current_chunk: (0..stream_position),
+                elapsed: download_start.elapsed(),
+                phase: StreamPhase::Prefetching {
+                    target: self.prefetch_bytes,
+                    chunk_size,
+                },
             },
-        });
+        );
     }
 
     fn report_downloading_progress(
@@ -473,27 +476,33 @@ where
         chunk_size: usize,
     ) -> io::Result<()> {
         let pos = self.writer.stream_position()?;
-        self.report_progress(stream, StreamState {
-            current_position: pos,
-            current_chunk: self
-                .downloaded
-                .get(new_position - 1)
-                .expect("position already downloaded"),
-            elapsed: download_start.elapsed(),
-            phase: StreamPhase::Downloading { chunk_size },
-        });
+        self.report_progress(
+            stream,
+            StreamState {
+                current_position: pos,
+                current_chunk: self
+                    .downloaded
+                    .get(new_position - 1)
+                    .expect("position already downloaded"),
+                elapsed: download_start.elapsed(),
+                phase: StreamPhase::Downloading { chunk_size },
+            },
+        );
         Ok(())
     }
 
     fn report_download_complete(&mut self, stream: &S, download_start: Instant) -> io::Result<()> {
         let pos = self.writer.stream_position()?;
-        self.report_progress(stream, StreamState {
-            current_position: pos,
-            elapsed: download_start.elapsed(),
-            // ensure no subtraction overflow
-            current_chunk: self.downloaded.get(pos.max(1) - 1).unwrap_or_default(),
-            phase: StreamPhase::Complete,
-        });
+        self.report_progress(
+            stream,
+            StreamState {
+                current_position: pos,
+                elapsed: download_start.elapsed(),
+                // ensure no subtraction overflow
+                current_chunk: self.downloaded.get(pos.max(1) - 1).unwrap_or_default(),
+                phase: StreamPhase::Complete,
+            },
+        );
         Ok(())
     }
 
