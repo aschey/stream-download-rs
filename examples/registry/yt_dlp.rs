@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
@@ -63,15 +62,20 @@ impl RegistryEntry<Result<Reader>> for YtDlpResolver {
             YoutubeDlOutput::SingleVideo(video) => {
                 info!("found single video: {:?}", video.title);
                 let formats = video.formats.unwrap();
-                let mut valid_formats: Vec<_> = formats
+                let worst_score = 10.0;
+                // find best format (0 is best, 10 is worst)
+                formats
                     .into_iter()
                     .filter(|f| f.ext.as_deref() == Some(yt_dlp_format))
-                    .collect();
-                // Sort formats by quality (0 is best, 10 is worst)
-                valid_formats
-                    .sort_by(|a, b| a.quality.partial_cmp(&b.quality).unwrap_or(Ordering::Equal));
-                // Use the best quality one
-                valid_formats.pop()
+                    .reduce(|best, format| {
+                        if format.quality.unwrap_or(worst_score)
+                            < best.quality.unwrap_or(worst_score)
+                        {
+                            format
+                        } else {
+                            best
+                        }
+                    })
             }
             YoutubeDlOutput::Playlist(playlist) => {
                 info!("found playlist: {:?}", playlist.title);
