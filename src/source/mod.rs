@@ -14,7 +14,6 @@ use futures::{Future, Stream, StreamExt, TryStream};
 use handle::{
     DownloadStatus, Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle,
 };
-use tap::TapFallible;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -133,9 +132,10 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     cancellation_token: CancellationToken,
 }
 
-impl<S: SourceStream, W: StorageWriter> Source<S, W>
+impl<S, W> Source<S, W>
 where
-    S::Error: Debug,
+    S: SourceStream<Error: Debug>,
+    W: StorageWriter,
 {
     pub(crate) fn new(
         writer: W,
@@ -255,7 +255,7 @@ where
         // we'll cap the reconnect time to prevent additional delays between reconnect attempts.
         let reconnect_pos = tokio::time::timeout(self.retry_timeout, stream.reconnect(pos)).await;
         if reconnect_pos
-            .tap_err(|e| warn!("error attempting to reconnect: {e:?}"))
+            .inspect_err(|e| warn!("error attempting to reconnect: {e:?}"))
             .is_ok()
         {
             if let Some(on_reconnect) = &mut self.on_reconnect {

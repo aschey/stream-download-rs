@@ -1,8 +1,8 @@
 use std::io::{self, Seek, SeekFrom, Write};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -19,23 +19,27 @@ use tokio::sync::{mpsc, oneshot};
 use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 
-pub static SERVER_RT: OnceLock<Runtime> = OnceLock::new();
-pub static SERVER_ADDR: OnceLock<SocketAddr> = OnceLock::new();
+pub static SERVER_RT: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
+pub static SERVER_LISTENER: LazyLock<TcpListener> = LazyLock::new(|| {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    listener
+});
+
+pub fn server_addr() -> SocketAddr {
+    SERVER_LISTENER.local_addr().unwrap()
+}
 
 #[ctor]
 fn setup() {
     setup_logger();
 
-    let rt = SERVER_RT.get_or_init(|| Runtime::new().unwrap());
-    let _guard = rt.enter();
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
+    let _guard = SERVER_RT.enter();
 
-    SERVER_ADDR.get_or_init(|| listener.local_addr().unwrap());
     let service = ServeDir::new("./assets");
     let router = Router::new().fallback_service(service);
-
-    rt.spawn(async move {
+    let listener = SERVER_LISTENER.try_clone().unwrap();
+    SERVER_RT.spawn(async move {
         let listener = tokio::net::TcpListener::from_std(listener).unwrap();
         axum::serve(listener, router).await.unwrap();
     });

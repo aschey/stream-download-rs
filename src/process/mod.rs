@@ -26,7 +26,6 @@ use bytes::Bytes;
 pub use command_builder::*;
 pub use ffmpeg::*;
 use futures::Stream;
-use tap::TapFallible;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, warn};
 pub use yt_dlp::*;
@@ -209,17 +208,17 @@ impl ProcessStream {
         for file in &mut self.stderr_files {
             let _ = file
                 .flush()
-                .tap_err(|e| error!("error flushing file: {e:?}"));
+                .inspect_err(|e| error!("error flushing file: {e:?}"));
             // Need to reopen the file to access the contents since it was written to from an
             // external process
             if let Ok(mut file_handle) = file
                 .reopen()
-                .tap_err(|e| error!("error opening file: {e:?}"))
+                .inspect_err(|e| error!("error opening file: {e:?}"))
             {
                 let mut buf = String::new();
                 let _ = file_handle
                     .read_to_string(&mut buf)
-                    .tap_err(|e| error!("error reading file: {e:?}"));
+                    .inspect_err(|e| error!("error reading file: {e:?}"));
                 warn!("stderr from child process: {buf}");
             }
         }
@@ -227,7 +226,9 @@ impl ProcessStream {
 
     fn close_stderr_files(&mut self) {
         for file in mem::take(&mut self.stderr_files) {
-            let _ = file.close().tap_err(|e| warn!("error closing file: {e:?}"));
+            let _ = file
+                .close()
+                .inspect_err(|e| warn!("error closing file: {e:?}"));
         }
     }
 }

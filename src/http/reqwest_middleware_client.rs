@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock};
 
 use parking_lot::Mutex;
 use reqwest::header::HeaderMap;
@@ -6,21 +6,14 @@ use reqwest_middleware::Middleware;
 
 use super::{Client, RANGE_HEADER_KEY, format_range_header_bytes};
 
-static DEFAULT_MIDDLEWARE: OnceLock<Mutex<Vec<Arc<dyn reqwest_middleware::Middleware>>>> =
-    OnceLock::new();
-
-fn get_middleware() -> &'static Mutex<Vec<Arc<dyn reqwest_middleware::Middleware>>> {
-    DEFAULT_MIDDLEWARE.get_or_init(|| Mutex::new([].into()))
-}
+static DEFAULT_MIDDLEWARE: LazyLock<Mutex<Vec<Arc<dyn reqwest_middleware::Middleware>>>> =
+    LazyLock::new(|| Mutex::new([].into()));
 
 pub(crate) fn add_default_middleware<M>(middleware: M)
 where
     M: Middleware,
 {
-    DEFAULT_MIDDLEWARE
-        .get_or_init(|| Mutex::new([].into()))
-        .lock()
-        .push(Arc::new(middleware));
+    DEFAULT_MIDDLEWARE.lock().push(Arc::new(middleware));
 }
 
 impl Client for reqwest_middleware::ClientWithMiddleware {
@@ -32,7 +25,7 @@ impl Client for reqwest_middleware::ClientWithMiddleware {
     fn create() -> Self {
         Self::new(
             reqwest::Client::create(),
-            get_middleware().lock().clone().into_boxed_slice(),
+            DEFAULT_MIDDLEWARE.lock().clone().into_boxed_slice(),
         )
     }
 

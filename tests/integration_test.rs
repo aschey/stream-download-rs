@@ -6,7 +6,7 @@ use std::{fs, io};
 
 use opendal::{Operator, services};
 use rstest::rstest;
-use setup::{Command, ErrorTestStorageProvider, SERVER_ADDR, SERVER_RT, TestClient};
+use setup::{Command, ErrorTestStorageProvider, SERVER_RT, TestClient, server_addr};
 use stream_download::async_read::AsyncReadStreamParams;
 use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
@@ -42,9 +42,9 @@ fn compare(a: impl Into<Vec<u8>>, b: impl Into<Vec<u8>>) {
 #[case(256*1024)]
 #[case(1024*1024)]
 fn new(#[case] prefetch_bytes: u64) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new::<http::HttpStream<reqwest::Client>>(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
@@ -75,12 +75,12 @@ fn new_with_middleware(#[case] prefetch_bytes: u64) {
     use reqwest_retry::RetryTransientMiddleware;
     use reqwest_retry::policies::ExponentialBackoff;
 
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
         Settings::add_default_middleware(RetryTransientMiddleware::new_with_policy(retry_policy));
 
         let mut reader = StreamDownload::new_http_with_middleware(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
@@ -108,9 +108,8 @@ fn new_with_middleware(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] chunk_size: usize) {
-    SERVER_RT.get().unwrap().block_on(async move {
-        let builder =
-            services::Http::default().endpoint(&format!("http://{}", SERVER_ADDR.get().unwrap()));
+    SERVER_RT.block_on(async move {
+        let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
         let operator = Operator::new(builder).unwrap().finish();
         let mut reader = StreamDownload::new_open_dal(
             OpenDalStreamParams::new(operator, "music.mp3")
@@ -140,10 +139,10 @@ fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] c
 #[case(256*1024)]
 #[case(1024*1024)]
 fn from_stream_http(#[case] prefetch_bytes: u64) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let stream = http::HttpStream::new(
             reqwest::Client::new(),
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
         )
@@ -190,9 +189,8 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
 #[case(256*1024)]
 #[case(1024*1024)]
 fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
-    SERVER_RT.get().unwrap().block_on(async move {
-        let builder =
-            services::Http::default().endpoint(&format!("http://{}", SERVER_ADDR.get().unwrap()));
+    SERVER_RT.block_on(async move {
+        let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
         let operator = Operator::new(builder).unwrap().finish();
         let stream = OpenDalStream::new(OpenDalStreamParams::new(operator, "music.mp3"))
             .await
@@ -225,9 +223,9 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
 
 #[rstest]
 fn handle_error() {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let reader = StreamDownload::new_http(
-            format!("http://{}/invalid.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/invalid.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
@@ -249,9 +247,9 @@ fn basic_download(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
     + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             storage,
@@ -283,9 +281,9 @@ fn tempfile_builder(
     )]
     storage: TempStorageProvider,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             storage,
@@ -306,9 +304,9 @@ fn tempfile_builder(
 
 #[test]
 fn return_error() {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             ErrorTestStorageProvider(MemoryStorageProvider),
@@ -333,7 +331,7 @@ fn slow_download(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
     + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -355,7 +353,7 @@ fn slow_download(
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, true),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -384,7 +382,7 @@ fn cancel_on_drop(
     #[values(0, 1, 256*1024, 1024*1024)] prefetch_bytes: u64,
     #[values(MemoryStorageProvider)] storage: impl StorageProvider + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -402,7 +400,7 @@ fn cancel_on_drop(
         let reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, true),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -433,7 +431,7 @@ fn retry_stuck_download(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
     + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -470,7 +468,7 @@ fn retry_stuck_download(
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, true),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -502,10 +500,9 @@ fn bounded<T>(
     #[values(256*1024, 300*1024)] bounded_length: usize,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
 ) where
-    T: StorageProvider,
-    <T as StorageProvider>::Reader: RefUnwindSafe + UnwindSafe,
+    T: StorageProvider<Reader: RefUnwindSafe + UnwindSafe>,
 {
-    let buf = SERVER_RT.get().unwrap().block_on(async move {
+    let buf = SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -530,7 +527,7 @@ fn bounded<T>(
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, false),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -571,10 +568,9 @@ fn adaptive<T>(
     #[values(true, false)] has_content_length: bool,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
 ) where
-    T: StorageProvider + 'static,
-    <T as StorageProvider>::Reader: RefUnwindSafe + UnwindSafe,
+    T: StorageProvider<Reader: RefUnwindSafe + UnwindSafe> + 'static,
 {
-    let buf = SERVER_RT.get().unwrap().block_on(async move {
+    let buf = SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -596,7 +592,7 @@ fn adaptive<T>(
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, has_content_length),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -635,7 +631,7 @@ fn adaptive<T>(
 
 #[rstest]
 fn bounded_seek_near_beginning() {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -650,7 +646,7 @@ fn bounded_seek_near_beginning() {
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, false),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -711,9 +707,9 @@ fn backpressure(
     #[values(4096, 4096*2+1, 256*1024)] bounded_size: usize,
     #[values(1, 5)] multiplier: usize,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             BoundedStorageProvider::new(
@@ -747,7 +743,7 @@ fn seek_basic(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
     + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -769,7 +765,7 @@ fn seek_basic(
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, true),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -806,9 +802,8 @@ fn seek_basic_open_dal(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
     + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
-        let builder =
-            services::Http::default().endpoint(&format!("http://{}", SERVER_ADDR.get().unwrap()));
+    SERVER_RT.block_on(async move {
+        let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
 
         let operator = Operator::new(builder).unwrap().finish();
 
@@ -852,7 +847,7 @@ fn seek_all(
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: impl StorageProvider
     + 'static,
 ) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
 
         let handle = tokio::spawn(async move {
@@ -884,7 +879,7 @@ fn seek_all(
         let mut reader = StreamDownload::from_stream(
             http::HttpStream::new(
                 TestClient::new(tx, true),
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
             )
@@ -954,9 +949,9 @@ fn seek_all(
 #[case(256*1024)]
 #[case(1024*1024)]
 fn cancel_download(#[case] prefetch_bytes: u64) {
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
@@ -988,7 +983,7 @@ fn cancel_download(#[case] prefetch_bytes: u64) {
 fn on_progress(#[case] prefetch_bytes: u64) {
     let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let progress_task = tokio::spawn(async move {
             let next = rx.recv().await.unwrap();
             assert!(matches!(
@@ -1020,7 +1015,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
             }
         });
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
@@ -1054,7 +1049,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
 fn on_progress_no_prefetch() {
     let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let progress_task = tokio::spawn(async move {
             let next = rx.recv().await.unwrap();
             assert!(matches!(
@@ -1073,7 +1068,7 @@ fn on_progress_no_prefetch() {
             }
         });
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
@@ -1108,7 +1103,7 @@ fn on_progress_no_prefetch() {
 fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
     let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
 
-    SERVER_RT.get().unwrap().block_on(async move {
+    SERVER_RT.block_on(async move {
         let progress_task = tokio::spawn(async move {
             let next = rx.recv().await.unwrap();
             assert!(matches!(
@@ -1127,7 +1122,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
             }
         });
         let mut reader = StreamDownload::new_http(
-            format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+            format!("http://{}/music.mp3", server_addr())
                 .parse()
                 .unwrap(),
             MemoryStorageProvider,
