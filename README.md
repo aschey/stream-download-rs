@@ -370,4 +370,4 @@ for dynamically modifying each HTTP request.
 
 ## Supported Rust Versions
 
-The MSRV is currently `1.75.0`.
+The MSRV is currently `1.80.0`.

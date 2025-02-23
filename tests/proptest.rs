@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::{fs, io};
 
 use proptest::prelude::*;
-use setup::{SERVER_ADDR, SERVER_RT};
+use setup::{SERVER_RT, server_addr};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
@@ -45,9 +45,9 @@ prop_compose! {
 proptest! {
     #[test]
     fn proptest(StreamParams { read_len, bounded_size, prefetch_bytes } in input_sizes()) {
-        let buf = SERVER_RT.get().unwrap().block_on(async move {
+        let buf = SERVER_RT.block_on(async move {
             let mut reader = StreamDownload::new_http(
-                format!("http://{}/music.mp3", SERVER_ADDR.get().unwrap())
+                format!("http://{}/music.mp3", server_addr())
                     .parse()
                     .unwrap(),
                 BoundedStorageProvider::new(MemoryStorageProvider,

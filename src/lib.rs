@@ -22,7 +22,6 @@ pub use settings::*;
 use source::handle::SourceHandle;
 use source::{DecodeError, Source, SourceStream};
 use storage::StorageProvider;
-use tap::Tap;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -449,8 +448,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         settings: Settings<S>,
     ) -> Result<Self, StreamInitializationError<S>>
     where
-        S: SourceStream,
-        S::Error: Debug + Send,
+        S: SourceStream<Error: Debug + Send>,
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = Result<S, S::StreamCreationError>> + Send,
     {
@@ -509,7 +507,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     fn handle_read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let res = self.output_reader.read(buf).tap(|l| {
+        let res = self.output_reader.read(buf).inspect(|l| {
             trace!(read_length = format!("{l:?}"), "returning read");
         });
         self.handle.notify_read();
@@ -633,7 +631,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
             return self
                 .output_reader
                 .seek(SeekFrom::Start(absolute_seek_position))
-                .tap(|p| debug!(position = format!("{p:?}"), "returning seek position"));
+                .inspect_err(|p| debug!(position = format!("{p:?}"), "returning seek position"));
         }
 
         self.handle.request_position(absolute_seek_position);
@@ -648,7 +646,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
 
         self.output_reader
             .seek(SeekFrom::Start(absolute_seek_position))
-            .tap(|p| debug!(position = format!("{p:?}"), "returning seek position"))
+            .inspect_err(|p| debug!(position = format!("{p:?}"), "returning seek position"))
     }
 }
 

@@ -1,12 +1,11 @@
 //! Adapters for using [`reqwest`] with `stream-download`
 
 use std::str::FromStr;
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 
 use bytes::Bytes;
 use futures::Stream;
 use reqwest::header::{self, AsHeaderName, HeaderMap};
-use tap::TapFallible;
 use tracing::warn;
 
 use super::{DecodeError, RANGE_HEADER_KEY, format_range_header_bytes};
@@ -21,7 +20,7 @@ impl ResponseHeaders for HeaderMap {
 fn get_header_str<K: AsHeaderName>(headers: &HeaderMap, key: K) -> Option<&str> {
     headers.get(key).and_then(|val| {
         val.to_str()
-            .tap_err(|e| warn!("error converting header value: {e:?}"))
+            .inspect_err(|e| warn!("error converting header value: {e:?}"))
             .ok()
     })
 }
@@ -64,7 +63,7 @@ impl ClientResponse for reqwest::Response {
     fn content_length(&self) -> Option<u64> {
         get_header_str(self.headers(), header::CONTENT_LENGTH).and_then(|content_length| {
             u64::from_str(content_length)
-                .tap_err(|e| warn!("invalid content length value: {e:?}"))
+                .inspect_err(|e| warn!("invalid content length value: {e:?}"))
                 .ok()
         })
     }
@@ -96,7 +95,7 @@ impl ClientResponse for reqwest::Response {
 }
 
 // per reqwest's docs, it's advisable to create a single client and reuse it
-static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 
 impl Client for reqwest::Client {
     type Url = reqwest::Url;
@@ -105,7 +104,7 @@ impl Client for reqwest::Client {
     type Headers = HeaderMap;
 
     fn create() -> Self {
-        CLIENT.get_or_init(Self::new).clone()
+        CLIENT.clone()
     }
 
     async fn get(&self, url: &Self::Url) -> Result<Self::Response, Self::Error> {

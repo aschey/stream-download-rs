@@ -7,7 +7,6 @@ use std::time::Instant;
 
 use parking_lot::{Condvar, Mutex, RwLock};
 use rangemap::RangeSet;
-use tap::TapFallible;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Notify, mpsc};
 use tracing::{debug, error};
@@ -47,7 +46,7 @@ impl SourceHandle {
     pub(crate) fn seek(&self, position: u64) {
         self.seek_tx
             .try_send(position)
-            .tap_err(|e| {
+            .inspect_err(|e| {
                 if let TrySendError::Full(capacity) = e {
                     error!("Seek buffer full. Capacity: {capacity}");
                 }
