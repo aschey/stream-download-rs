@@ -55,7 +55,7 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.37.0", features = ["sync", "macros", "rt-multi-thread"] }
 tower-http = { version = "0.6.0", features = ["fs"] }
 tower = { version = "0.5.0", features = ["make"] }
-ctor = "0.3.3"
+ctor = "0.4.0"
 rstest = "0.24.0"
 proptest = "1.4.0"
 axum = "0.8.1"
