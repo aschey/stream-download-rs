@@ -15,4 +15,4 @@ jobs:
         with:
           toolchain: nightly
       - name: build
-        run: cargo +nightly build
+        run: cargo +nightly build --all-features

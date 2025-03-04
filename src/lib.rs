@@ -1,6 +1,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
+#![deny(clippy::allow_attributes)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::doc_markdown)]

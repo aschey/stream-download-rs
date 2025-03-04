@@ -85,7 +85,7 @@ pub trait SourceStream:
     fn on_finish(
         &mut self,
         result: io::Result<()>,
-        #[allow(unused)] outcome: StreamOutcome,
+        #[expect(unused)] outcome: StreamOutcome,
     ) -> impl Future<Output = io::Result<()>> + Send {
         future::ready(result)
     }
