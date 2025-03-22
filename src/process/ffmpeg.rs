@@ -21,15 +21,12 @@ impl FfmpegConvertAudioCommand {
         S: AsRef<str>,
     {
         // -i pipe: = pipe input from stdin
-        // -qscale:a 0 = quality scale 0 (highest quality VBR)
         // -map a = select all audio streams
         // -f <format> output format
         // - = output to stdout
         Self(Command::new("ffmpeg").args([
             "-i",
             "pipe:",
-            "-qscale:a",
-            "0",
             "-map",
             "a",
             "-f",
@@ -47,6 +44,31 @@ impl FfmpegConvertAudioCommand {
         S: Into<OsString>,
     {
         self.0.program = path.into();
+        self
+    }
+
+    /// Adds an argument to the [`FfmpegConvertAudioCommand`].
+    #[must_use]
+    pub fn arg<S>(mut self, arg: S) -> Self
+    where
+        S: Into<OsString>,
+    {
+        // '-' needs to be the last arg, so we'll insert everything right before it
+        let insert_pos = self.0.args.len() - 1;
+        self.0 = self.0.insert_arg(insert_pos, arg);
+        self
+    }
+
+    /// Adds multiple args to the [`FfmpegConvertAudioCommand`].
+    #[must_use]
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<OsString>,
+    {
+        for arg in args.into_iter() {
+            self = self.arg(arg);
+        }
         self
     }
 }

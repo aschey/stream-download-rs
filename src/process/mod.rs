@@ -88,6 +88,15 @@ impl Command {
         self
     }
 
+    /// Inserts an argument at the given position.
+    pub fn insert_arg<S>(mut self, index: usize, arg: S) -> Self
+    where
+        S: Into<OsString>,
+    {
+        self.args.insert(index, arg.into());
+        self
+    }
+
     /// Sets the [`Stdio`] handle for the `stderr` stream of the command. This is used for error
     /// reporting in case of a failure.
     ///
