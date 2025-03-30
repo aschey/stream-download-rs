@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.\n
 body = """
 {% if version %}\
     {% if previous.version %}\
-        ## [{{ version | trim_start_matches(pat="v") }}](<REPO>/compare/{{ previous.version }}..{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+        ## [{{ version | trim_start_matches(pat="v") }}](<REPO>/compare/v{{ previous.version }}..v{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
     {% else %}\
         ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
     {% endif %}\
