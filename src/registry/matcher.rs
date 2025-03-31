@@ -163,7 +163,9 @@ impl Rule {
 }
 
 /// Helper method to create a regex that will match HTTP or HTTPS URL schemes.
+#[expect(clippy::missing_panics_doc)]
 pub fn http_regex() -> Regex {
+    // Only panics if the regex is mistyped
     Regex::new(r"^https?$").expect("invalid regex")
 }
 

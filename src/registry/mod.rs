@@ -139,6 +139,10 @@ impl Source {
     }
 
     /// Extracts the inner [Url] from this source, panicking if not available.
+    ///
+    /// # Panics
+    ///
+    /// If the type is not [`Source::Url`].
     pub fn into_url(self) -> Url {
         self.try_into_url().expect("incorrect input type")
     }
@@ -152,6 +156,10 @@ impl Source {
     }
 
     /// Extracts the inner [String] from this source, panicking if not available.
+    ///
+    /// # Panics
+    ///
+    /// If the type is not [`Source::String`].
     pub fn into_string(self) -> String {
         self.try_into_string().expect("incorrect input type")
     }

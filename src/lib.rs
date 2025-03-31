@@ -3,6 +3,7 @@
 #![forbid(clippy::unwrap_used)]
 #![deny(clippy::allow_attributes)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![warn(clippy::impl_trait_in_params)]
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::doc_markdown)]
 #![warn(clippy::default_trait_access)]
@@ -11,6 +12,10 @@
 #![warn(clippy::missing_fields_in_debug)]
 #![warn(clippy::use_self)]
 #![warn(missing_debug_implementations)]
+#![warn(clippy::missing_panics_doc)]
+#![warn(clippy::explicit_iter_loop)]
+#![warn(clippy::explicit_into_iter_loop)]
+#![warn(clippy::redundant_closure_for_method_calls)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 
