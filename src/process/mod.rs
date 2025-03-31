@@ -72,7 +72,7 @@ impl Command {
         I: IntoIterator<Item = S>,
         S: Into<OsString>,
     {
-        for arg in args.into_iter() {
+        for arg in args {
             self = self.arg(arg);
         }
         self

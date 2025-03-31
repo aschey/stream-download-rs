@@ -227,6 +227,7 @@ where
         self.report_download_complete(stream, download_start)?;
         Ok(StreamOutcome::Completed)
     }
+
     async fn handle_seek(&mut self, stream: &mut S, position: &Option<u64>) -> io::Result<()> {
         let position = position.expect("seek_tx dropped");
         if self.should_seek(stream, position)? {

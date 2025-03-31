@@ -39,7 +39,10 @@ impl TempStorageProvider {
 
     /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified
     /// location.
-    pub fn new_in(path: impl Into<PathBuf>) -> Self {
+    pub fn new_in<T>(path: T) -> Self
+    where
+        T: Into<PathBuf>,
+    {
         Self {
             storage_dir: Some(path.into()),
             tempfile_fn: None,
@@ -49,7 +52,10 @@ impl TempStorageProvider {
 
     /// Creates a new [`TempStorageProvider`] that creates temporary files using the specified
     /// filename prefix.
-    pub fn with_prefix(prefix: impl Into<OsString>) -> Self {
+    pub fn with_prefix<T>(prefix: T) -> Self
+    where
+        T: Into<OsString>,
+    {
         Self {
             storage_dir: None,
             tempfile_fn: None,
@@ -59,7 +65,11 @@ impl TempStorageProvider {
 
     /// Creates a new [`TempStorageProvider`] that creates temporary files in the specified location
     /// using the specified filename prefix.
-    pub fn with_prefix_in(prefix: impl Into<OsString>, path: impl Into<PathBuf>) -> Self {
+    pub fn with_prefix_in<S, P>(prefix: S, path: P) -> Self
+    where
+        S: Into<OsString>,
+        P: Into<PathBuf>,
+    {
         Self {
             storage_dir: Some(path.into()),
             tempfile_fn: None,
