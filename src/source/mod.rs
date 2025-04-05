@@ -10,7 +10,7 @@ use std::ops::Range;
 use std::time::{Duration, Instant};
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::{Future, Stream, StreamExt, TryStream};
+use futures_util::{Future, Stream, StreamExt, TryStream};
 use handle::{
     DownloadStatus, Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle,
 };

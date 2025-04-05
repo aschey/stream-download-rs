@@ -25,7 +25,7 @@ use std::task::Poll;
 use bytes::Bytes;
 pub use command_builder::*;
 pub use ffmpeg::*;
-use futures::Stream;
+use futures_util::Stream;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, warn};
 pub use yt_dlp::*;

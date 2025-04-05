@@ -34,7 +34,7 @@ use std::num::NonZeroUsize;
 use std::task::Poll;
 
 use bytes::{Bytes, BytesMut};
-use futures::{Stream, ready};
+use futures_util::{Stream, ready};
 use opendal::{FuturesAsyncReader, Operator, Reader};
 use pin_project_lite::pin_project;
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
