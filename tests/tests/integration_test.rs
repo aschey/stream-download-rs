@@ -6,10 +6,11 @@ use std::{fs, io};
 
 use opendal::{Operator, services};
 use rstest::rstest;
-use setup::{Command, ErrorTestStorageProvider, SERVER_RT, TestClient, server_addr};
+use setup::{
+    ASSETS, Command, ErrorTestStorageProvider, SERVER_RT, TestClient, music_path, server_addr,
+};
 use stream_download::async_read::AsyncReadStreamParams;
 use stream_download::http::{HttpStream, HttpStreamError};
-use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
 use stream_download::process::{self, ProcessStreamParams};
 use stream_download::source::SourceStream;
 use stream_download::storage::StorageProvider;
@@ -18,13 +19,14 @@ use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload, StreamInitializationError, StreamState, http};
+use stream_download_opendal::{OpendalStream, OpendalStreamParams, StreamDownloadExt};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::spawn_blocking;
 
 mod setup;
 
 fn get_file_buf() -> Vec<u8> {
-    fs::read("./assets/music.mp3").unwrap()
+    fs::read(music_path()).unwrap()
 }
 
 fn compare(a: impl Into<Vec<u8>>, b: impl Into<Vec<u8>>) {
@@ -111,8 +113,8 @@ fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] c
     SERVER_RT.block_on(async move {
         let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
         let operator = Operator::new(builder).unwrap().finish();
-        let mut reader = StreamDownload::new_open_dal(
-            OpenDalStreamParams::new(operator, "music.mp3")
+        let mut reader = StreamDownload::new_opendal(
+            OpendalStreamParams::new(operator, "music.mp3")
                 .chunk_size(NonZeroUsize::new(chunk_size).unwrap()),
             MemoryStorageProvider,
             Settings::default().prefetch_bytes(prefetch_bytes),
@@ -192,7 +194,7 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
     SERVER_RT.block_on(async move {
         let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
         let operator = Operator::new(builder).unwrap().finish();
-        let stream = OpenDalStream::new(OpenDalStreamParams::new(operator, "music.mp3"))
+        let stream = OpendalStream::new(OpendalStreamParams::new(operator, "music.mp3"))
             .await
             .unwrap();
 
@@ -272,9 +274,9 @@ fn basic_download(
 #[rstest]
 fn tempfile_builder(
     #[values(
-        TempStorageProvider::new_in("./assets"),
+        TempStorageProvider::new_in(ASSETS),
         TempStorageProvider::with_prefix("testfile"),
-        TempStorageProvider::with_prefix_in("testfile", "./assets"),
+        TempStorageProvider::with_prefix_in("testfile", ASSETS),
         TempStorageProvider::with_tempfile_builder(|| {
             tempfile::Builder::new().suffix("testfile").tempfile()
         }),
@@ -807,8 +809,8 @@ fn seek_basic_open_dal(
 
         let operator = Operator::new(builder).unwrap().finish();
 
-        let mut reader = StreamDownload::new::<OpenDalStream>(
-            OpenDalStreamParams::new(operator, "music.mp3"),
+        let mut reader = StreamDownload::new::<OpendalStream>(
+            OpendalStreamParams::new(operator, "music.mp3"),
             storage,
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
@@ -1155,7 +1157,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
 #[tokio::test]
 async fn async_read_file() {
     let mut reader = StreamDownload::new_async_read(
-        AsyncReadStreamParams::new(tokio::fs::File::open("./assets/music.mp3").await.unwrap()),
+        AsyncReadStreamParams::new(tokio::fs::File::open(music_path()).await.unwrap()),
         MemoryStorageProvider,
         Settings::default(),
     )
@@ -1180,10 +1182,11 @@ async fn async_read_file() {
 // See https://stackoverflow.com/questions/62835179/how-do-i-pipe-a-byte-stream-to-from-an-external-command
 #[tokio::test]
 async fn process() {
+    let music = music_path();
     let cmd = if cfg!(windows) {
-        process::Command::new("cmd").args(["/c", "type", ".\\assets\\music.mp3"])
+        process::Command::new("cmd").args(["/c", "type", &music.replace('/', "\\")])
     } else {
-        process::Command::new("cat").args(["./assets/music.mp3"])
+        process::Command::new("cat").args([music])
     };
     let mut reader = StreamDownload::new_process(
         ProcessStreamParams::new(cmd).unwrap(),
@@ -1210,9 +1213,8 @@ async fn process() {
 #[cfg(not(windows))]
 #[tokio::test]
 async fn process_piped() {
-    let cmd =
-        process::CommandBuilder::new(process::Command::new("cat").args(["./assets/music.mp3"]))
-            .pipe(process::Command::new("cat"));
+    let cmd = process::CommandBuilder::new(process::Command::new("cat").arg(music_path()))
+        .pipe(process::Command::new("cat"));
     let mut reader = StreamDownload::new_process(
         ProcessStreamParams::new(cmd).unwrap(),
         MemoryStorageProvider,

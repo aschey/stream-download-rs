@@ -1,4 +1,4 @@
-# stream-download-rs
+# stream-download
 
 [![crates.io](https://img.shields.io/crates/v/stream-download.svg?logo=rust)](https://crates.io/crates/stream-download)
 [![docs.rs](https://img.shields.io/docsrs/stream-download?logo=rust)](https://docs.rs/stream-download)
@@ -45,8 +45,6 @@ cargo add stream-download
   [`reqwest-middleware`](https://crates.io/crates/reqwest-middleware). Can be
   used to add retry policies and additional observability. Also enables the
   `reqwest` feature.
-- `open-dal` - adds a `SourceStream` implementation that uses
-  [Apache OpenDAL](https://crates.io/crates/opendal) as the backend.
 - `async-read` - adds a `SourceStream` implementation for any type implementing
   [`AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html).
 - `process` - adds a `SourceStream` implementation for external processes. Also
@@ -102,7 +100,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ## Examples
 
-See [examples](https://github.com/aschey/stream-download-rs/tree/main/examples).
+See
+[examples](https://github.com/aschey/stream-download-rs/tree/main/examples/examples).
 
 ## Transports
 
@@ -123,6 +122,12 @@ trait. A few types of transports are provided out of the box:
 
 Only `http` is enabled by default. You can provide a custom transport by
 implementing `SourceStream` yourself.
+
+### OpenDAL
+
+If you need to support other types of transports, you may wish to use
+[OpenDAL](https://crates.io/crates/opendal). An adapter is provided as a
+[separate crate](https://crates.io/crates/stream-download-opendal).
 
 ## Streams with Unknown Length
 

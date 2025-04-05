@@ -1,0 +1,32 @@
+[package]
+name = "stream-download-opendal"
+version = "0.1.0"
+readme = "README.md"
+description = "OpenDAL adapter for stream-download"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+include.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+stream-download = { version = "0.17.0", path = "../stream-download", default-features = false }
+opendal = { workspace = true }
+pin-project-lite = { workspace = true }
+thiserror = { workspace = true }
+tokio-util = { workspace = true, features = ["compat"] }
+futures-util = { workspace = true }
+tracing = { workspace = true }
+bytes = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]

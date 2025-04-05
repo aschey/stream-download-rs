@@ -1,0 +1,54 @@
+[package]
+name = "stream-download"
+version = "0.17.0"
+description = "A library for streaming content to a local cache"
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+include.workspace = true
+categories.workspace = true
+keywords.workspace = true
+
+[dependencies]
+async-trait = { workspace = true, optional = true }
+bytes = { workspace = true }
+educe = { workspace = true }
+futures-util = { workspace = true }
+mediatype = { workspace = true, optional = true }
+parking_lot = { workspace = true }
+rangemap = { workspace = true }
+regex = { workspace = true, optional = true }
+reqwest = { workspace = true, features = [
+  "stream",
+], default-features = false, optional = true }
+reqwest-middleware = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros", "rt", "time"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true, optional = true }
+
+[features]
+default = ["reqwest", "temp-storage"]
+http = ["dep:mediatype"]
+reqwest = ["http", "dep:reqwest"]
+reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
+reqwest-rustls = ["reqwest", "reqwest/rustls-tls"]
+reqwest-middleware = ["reqwest", "dep:reqwest-middleware"]
+temp-storage = ["dep:tempfile"]
+async-read = ["tokio-util/io"]
+process = ["tokio/process", "async-read", "dep:tempfile"]
+registry = ["dep:url", "dep:async-trait", "dep:regex"]
+
+[dev-dependencies]
+reqwest-retry = { workspace = true }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]

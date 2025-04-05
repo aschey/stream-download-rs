@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::{fs, io};
 
 use proptest::prelude::*;
-use setup::{SERVER_RT, server_addr};
+use setup::{SERVER_RT, music_path, server_addr};
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
@@ -79,7 +79,7 @@ proptest! {
 }
 
 fn get_file_buf() -> Vec<u8> {
-    fs::read("./assets/music.mp3").unwrap()
+    fs::read(music_path()).unwrap()
 }
 
 fn compare(a: impl Into<Vec<u8>>, b: impl Into<Vec<u8>>) {

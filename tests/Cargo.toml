@@ -1,0 +1,31 @@
+[package]
+name = "tests"
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stream-download = { path = "../crates/stream-download", features = [
+  "reqwest-middleware",
+  "process",
+  "async-read",
+  "registry",
+] }
+stream-download-opendal = { path = "../crates/stream-download-opendal" }
+rstest = { workspace = true }
+axum = { workspace = true }
+opendal = { workspace = true, features = ["services-http"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
+tempfile = { workspace = true }
+proptest = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
+async-trait = { workspace = true }
+regex = { workspace = true }
+bytes = { workspace = true }
+tower-http = { workspace = true, features = ["fs"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+ctor = { workspace = true }
+futures-util = { workspace = true }
+thiserror = { workspace = true }

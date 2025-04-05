@@ -25,6 +25,11 @@ pub static SERVER_LISTENER: LazyLock<TcpListener> = LazyLock::new(|| {
     listener.set_nonblocking(true).unwrap();
     listener
 });
+pub const ASSETS: &str = "../assets";
+
+pub fn music_path() -> String {
+    format!("{ASSETS}/music.mp3")
+}
 
 pub fn server_addr() -> SocketAddr {
     SERVER_LISTENER.local_addr().unwrap()
@@ -36,7 +41,7 @@ fn setup() {
 
     let _guard = SERVER_RT.enter();
 
-    let service = ServeDir::new("./assets");
+    let service = ServeDir::new(ASSETS);
     let router = Router::new().fallback_service(service);
     let listener = SERVER_LISTENER.try_clone().unwrap();
     SERVER_RT.spawn(async move {
