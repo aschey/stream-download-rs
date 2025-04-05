@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.17.0..stream-download-v0.18.0) - 2025-04-05
+
+### Refactor
+
+- [**breaking**] Move OpenDAL integration into separate crate ([#174](https://github.com/aschey/stream-download-rs/issues/174)) - ([987cc15](https://github.com/aschey/stream-download-rs/commit/987cc15f5307df96598d3f4d13bb04409d2b7dcf))
+
+### Dependencies
+
+- *(deps)* replace "futures" with "futures-util" ([#174](https://github.com/aschey/stream-download-rs/issues/176)) - ([3a041f5](https://github.com/aschey/stream-download-rs/commit/3a041f55e956c0d04042ec6a3e17a852cc8a3724))
+
 ## [0.17.0](https://github.com/aschey/stream-download-rs/compare/v0.16.1..v0.17.0) - 2025-03-31
 
 ### Refactor
