@@ -1,6 +1,6 @@
 # stream-download-opendal
 
-[![crates.io](https://img.shields.io/crates/v/stream-download.svg?logo=rust)](https://crates.io/crates/stream-download-opendal)
+[![crates.io](https://img.shields.io/crates/v/stream-download-opendal.svg?logo=rust)](https://crates.io/crates/stream-download-opendal)
 [![docs.rs](https://img.shields.io/docsrs/stream-download-opendal?logo=rust)](https://docs.rs/stream-download-opendal)
 [![Dependency Status](https://deps.rs/repo/github/aschey/stream-download-rs/status.svg?style=flat-square)](https://deps.rs/repo/github/aschey/stream-download-rs)
 ![license](https://img.shields.io/badge/License-MIT%20or%20Apache%202-green.svg)
