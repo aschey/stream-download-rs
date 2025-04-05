@@ -1,34 +1,10 @@
-//! A [`SourceStream`] adapter for [OpenDAL](https://docs.rs/opendal/latest/opendal).
-//! `OpenDAL` is a data access layer that supports data retrieval from a variety of storage
-//! services. The list of supported services is [documented here](https://docs.rs/opendal/latest/opendal/services/index.html).
-//!
-//! # Example using S3
-//!
-//! ```no_run
-//! use std::error::Error;
-//!
-//! use opendal::{Operator, services};
-//! use stream_download::open_dal::{OpenDalStream, OpenDalStreamParams};
-//! use stream_download::storage::temp::TempStorageProvider;
-//! use stream_download::{Settings, StreamDownload};
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn Error>> {
-//!     let mut builder = services::S3::default()
-//!         .region("us-east-1")
-//!         .access_key_id("test")
-//!         .secret_access_key("test")
-//!         .bucket("my-bucket");
-//!
-//!     let operator = Operator::new(builder)?.finish();
-//!     let stream =
-//!         OpenDalStream::new(OpenDalStreamParams::new(operator, "some-object-key")).await?;
-//!
-//!     Ok(())
-//! }
-//! ```
+#![deny(missing_docs)]
+#![forbid(clippy::unwrap_used)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
 
 use std::fmt::Debug;
+use std::future::Future;
 use std::io::{self};
 use std::num::NonZeroUsize;
 use std::task::Poll;
@@ -37,23 +13,85 @@ use bytes::{Bytes, BytesMut};
 use futures_util::{Stream, ready};
 use opendal::{FuturesAsyncReader, Operator, Reader};
 use pin_project_lite::pin_project;
+use stream_download::source::{DecodeError, SourceStream};
+use stream_download::storage::StorageProvider;
+use stream_download::{Settings, StreamDownload, StreamInitializationError};
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
 use tokio_util::io::poll_read_buf;
 use tracing::instrument;
 
-use crate::WrapIoResult;
-use crate::source::{DecodeError, SourceStream};
+/// Extension trait for adding `OpenDAL` support to a [`StreamDownload`] instance.
+pub trait StreamDownloadExt<P>
+where
+    Self: Sized,
+{
+    /// Creates a new [`StreamDownload`] that uses an `OpenDAL` resource.
+    /// See the [`opendal`] documentation for more details.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    /// use std::io::{self, Read};
+    /// use std::result::Result;
+    ///
+    /// use opendal::{Operator, services};
+    /// use stream_download::storage::temp::TempStorageProvider;
+    /// use stream_download::{Settings, StreamDownload};
+    /// use stream_download_opendal::{OpendalStreamParams, StreamDownloadExt};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut builder = services::S3::default()
+    ///         .region("us-east-1")
+    ///         .access_key_id("test")
+    ///         .secret_access_key("test")
+    ///         .bucket("my-bucket");
+    ///     let operator = Operator::new(builder)?.finish();
+    ///
+    ///     let mut reader = StreamDownload::new_opendal(
+    ///         OpendalStreamParams::new(operator, "some-object-key"),
+    ///         TempStorageProvider::default(),
+    ///         Settings::default(),
+    ///     )
+    ///     .await?;
+    ///
+    ///     tokio::task::spawn_blocking(move || {
+    ///         let mut buf = Vec::new();
+    ///         reader.read_to_end(&mut buf)?;
+    ///         Ok::<_, io::Error>(())
+    ///     })
+    ///     .await??;
+    ///     Ok(())
+    /// }
+    /// ```
+    fn new_opendal(
+        params: OpendalStreamParams,
+        storage_provider: P,
+        settings: Settings<OpendalStream>,
+    ) -> impl Future<Output = Result<Self, StreamInitializationError<OpendalStream>>> + Send;
+}
+
+impl<P: StorageProvider> StreamDownloadExt<P> for StreamDownload<P> {
+    async fn new_opendal(
+        params: OpendalStreamParams,
+        storage_provider: P,
+        settings: Settings<OpendalStream>,
+    ) -> Result<Self, StreamInitializationError<OpendalStream>> {
+        Self::new(params, storage_provider, settings).await
+    }
+}
 
 /// Parameters for creating an `OpenDAL` stream.
 #[derive(Debug, Clone)]
-pub struct OpenDalStreamParams {
+pub struct OpendalStreamParams {
     operator: Operator,
     path: String,
     chunk_size: usize,
 }
 
-impl OpenDalStreamParams {
-    /// Creates a new [`OpenDalStreamParams`] instance.
+impl OpendalStreamParams {
+    /// Creates a new [`OpendalStreamParams`] instance.
     pub fn new<S>(operator: Operator, path: S) -> Self
     where
         S: Into<String>,
@@ -65,7 +103,7 @@ impl OpenDalStreamParams {
         }
     }
 
-    /// Sets the chunk size for the [`OpenDalStream`].
+    /// Sets the chunk size for the [`OpendalStream`].
     /// The default value is 4096.
     #[must_use]
     pub fn chunk_size(mut self, chunk_size: NonZeroUsize) -> Self {
@@ -76,7 +114,7 @@ impl OpenDalStreamParams {
 
 pin_project! {
     /// An `OpenDAL` implementation of the [`SourceStream`] trait
-    pub struct OpenDalStream {
+    pub struct OpendalStream {
         #[pin]
         async_reader: Compat<FuturesAsyncReader>,
         reader: Reader,
@@ -88,9 +126,9 @@ pin_project! {
 }
 
 // Can't use educe here because of https://github.com/taiki-e/pin-project-lite/issues/3
-impl Debug for OpenDalStream {
+impl Debug for OpendalStream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OpenDalStream")
+        f.debug_struct("OpendalStream")
             .field("async_reader", &"<async_reader>")
             .field("reader", &"<reader>")
             .field("buf", &self.buf)
@@ -108,14 +146,14 @@ pub struct Error(#[from] opendal::Error);
 
 impl DecodeError for Error {}
 
-impl OpenDalStream {
-    /// Creates a new [`OpenDalStream`].
+impl OpendalStream {
+    /// Creates a new [`OpendalStream`].
     #[instrument]
-    pub async fn new(params: OpenDalStreamParams) -> Result<Self, Error> {
+    pub async fn new(params: OpendalStreamParams) -> Result<Self, Error> {
         let stat = params.operator.stat(&params.path).await?;
 
         let content_length = stat.content_length();
-        let content_type = stat.content_type().map(ToString::to_string);
+        let content_type = stat.content_type().map(|t| t.to_string());
 
         let reader = params.operator.reader(&params.path).await?;
 
@@ -141,8 +179,8 @@ impl OpenDalStream {
     }
 }
 
-impl SourceStream for OpenDalStream {
-    type Params = OpenDalStreamParams;
+impl SourceStream for OpendalStream {
+    type Params = OpendalStreamParams;
 
     type StreamCreationError = Error;
 
@@ -162,7 +200,7 @@ impl SourceStream for OpenDalStream {
         };
 
         self.async_reader = async_reader
-            .map_err(Into::into)
+            .map_err(|e| e.into())
             .wrap_err("error creating async reader")?
             .compat();
         Ok(())
@@ -177,7 +215,7 @@ impl SourceStream for OpenDalStream {
     }
 }
 
-impl Stream for OpenDalStream {
+impl Stream for OpendalStream {
     type Item = io::Result<Bytes>;
 
     fn poll_next(
@@ -197,6 +235,20 @@ impl Stream for OpenDalStream {
                 let chunk = this.buf.split();
                 Poll::Ready(Some(Ok(chunk.freeze())))
             }
+        }
+    }
+}
+
+pub(crate) trait WrapIoResult {
+    fn wrap_err(self, msg: &str) -> Self;
+}
+
+impl<T> WrapIoResult for io::Result<T> {
+    fn wrap_err(self, msg: &str) -> Self {
+        if let Err(e) = self {
+            Err(io::Error::new(e.kind(), format!("{msg}: {e}")))
+        } else {
+            self
         }
     }
 }

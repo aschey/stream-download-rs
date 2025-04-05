@@ -3,6 +3,8 @@ version = 2
 allow = [
   "MIT",
   "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "CC0-1.0",
   "Unicode-DFS-2016",
   "Unicode-3.0",
   "ISC",
@@ -24,6 +26,15 @@ name = "ring"
 # OpenSSL - Obviously
 expression = "ISC AND MIT AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# Only used for examples
+[[licenses.exceptions]]
+allow = ["LGPL-2.1"]
+name = "libmpv2"
+[[licenses.exceptions]]
+allow = ["LGPL-2.1"]
+name = "libmpv2-sys"
+
 
 [advisories]
 version = 2

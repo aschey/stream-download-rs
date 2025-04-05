@@ -16,10 +16,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     // This is a contrived example (there's no reason to use a process just to cat a file), but
     // it demonstrates how to use an arbitrary command as input
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let cmd = if cfg!(windows) {
-        Command::new("cmd").args(["/c", "type", ".\\assets\\music.mp3"])
+        Command::new("cmd").args([
+            "/c",
+            "type",
+            &format!("{manifest_dir}\\..\\assets\\music.mp3"),
+        ])
     } else {
-        Command::new("cat").args(["./assets/music.mp3"])
+        Command::new("cat").args([format!("{manifest_dir}/../assets/music.mp3")])
     };
     let reader = StreamDownload::new_process(
         ProcessStreamParams::new(cmd)?,
