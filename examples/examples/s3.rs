@@ -5,9 +5,9 @@ use aws_sdk_s3::config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use opendal::layers::LoggingLayer;
 use opendal::{Operator, services};
-use stream_download::open_dal::OpenDalStreamParams;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
+use stream_download_opendal::{OpendalStreamParams, StreamDownloadExt};
 use testcontainers_modules::localstack::LocalStack;
 use testcontainers_modules::testcontainers::core::logs::LogFrame;
 use testcontainers_modules::testcontainers::runners::AsyncRunner;
@@ -59,8 +59,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .layer(LoggingLayer::default())
         .finish();
 
-    let reader = StreamDownload::new_open_dal(
-        OpenDalStreamParams::new(operator, S3_KEY),
+    let reader = StreamDownload::new_opendal(
+        OpendalStreamParams::new(operator, S3_KEY),
         TempStorageProvider::new(),
         Settings::default(),
     )
@@ -105,7 +105,8 @@ async fn setup_localstack_s3(
     client.create_bucket().bucket(S3_BUCKET).send().await?;
     info!("bucket created");
 
-    let audio_file = "./assets/music.mp3";
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let audio_file = format!("{manifest_dir}/../assets/music.mp3");
 
     info!("copying audio file...");
 

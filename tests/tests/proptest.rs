@@ -79,7 +79,7 @@ proptest! {
 }
 
 fn get_file_buf() -> Vec<u8> {
-    fs::read("./assets/music.mp3").unwrap()
+    fs::read("../assets/music.mp3").unwrap()
 }
 
 fn compare(a: impl Into<Vec<u8>>, b: impl Into<Vec<u8>>) {

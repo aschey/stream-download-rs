@@ -2,7 +2,7 @@ use std::env::args;
 use std::error::Error;
 use std::time::Duration;
 
-use axum::http::{HeaderMap, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderValue};
 use stream_download::http::HttpStream;
 use stream_download::http::reqwest::Client;
 use stream_download::source::{DecodeError, SourceStream};
