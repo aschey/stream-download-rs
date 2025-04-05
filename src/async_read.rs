@@ -5,7 +5,7 @@ use std::io;
 use std::pin::Pin;
 
 use bytes::Bytes;
-use futures::Stream;
+use futures_util::Stream;
 use tokio::io::AsyncRead;
 use tokio_util::io::ReaderStream;
 

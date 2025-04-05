@@ -37,7 +37,7 @@ use std::time::Instant;
 
 use bytes::Bytes;
 use educe::Educe;
-use futures::{Future, Stream};
+use futures_util::{Future, Stream};
 use mediatype::MediaTypeBuf;
 #[cfg(feature = "reqwest")]
 pub use reqwest;
@@ -303,7 +303,7 @@ impl<C: Client> SourceStream for HttpStream<C> {
                 "attempting to seek where start is the length of the stream, returning empty \
                  stream"
             );
-            self.stream = Box::new(futures::stream::empty());
+            self.stream = Box::new(futures_util::stream::empty());
             return Ok(());
         }
 
