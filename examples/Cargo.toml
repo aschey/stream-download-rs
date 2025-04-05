@@ -1,0 +1,31 @@
+[package]
+name = "examples"
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stream-download = { path = "../crates/stream-download", features = [
+  "reqwest-rustls",
+  "reqwest-middleware",
+  "process",
+  "async-read",
+  "registry",
+] }
+stream-download-opendal = { path = "../crates/stream-download-opendal" }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+rodio = { workspace = true, default-features = false, features = [
+  "symphonia-all",
+] }
+regex = { workspace = true }
+reqwest = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["make"] }
+reqwest-retry = { workspace = true }
+youtube_dl = { workspace = true, features = ["tokio"] }
+libmpv2 = { workspace = true }
+testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
+opendal = { workspace = true, features = ["services-s3"] }
+aws-sdk-s3 = { workspace = true }

@@ -36,7 +36,7 @@ fn setup() {
 
     let _guard = SERVER_RT.enter();
 
-    let service = ServeDir::new("./assets");
+    let service = ServeDir::new("../assets");
     let router = Router::new().fallback_service(service);
     let listener = SERVER_LISTENER.try_clone().unwrap();
     SERVER_RT.spawn(async move {
