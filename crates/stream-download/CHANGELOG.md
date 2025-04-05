@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.18.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.17.0..stream-download-v0.18.0) - 2025-04-05
+## [0.18.0](https://github.com/aschey/stream-download-rs/compare/v0.17.0..stream-download-v0.18.0) - 2025-04-05
 
 ### Refactor
 
