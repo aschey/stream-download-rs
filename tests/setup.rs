@@ -9,7 +9,7 @@ use std::time::Duration;
 use axum::Router;
 use bytes::Bytes;
 use ctor::ctor;
-use futures::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use stream_download::http;
 use stream_download::source::DecodeError;
 use stream_download::storage::StorageProvider;

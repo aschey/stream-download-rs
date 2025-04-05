@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use bytes::Bytes;
-use futures::Stream;
+use futures_util::Stream;
 use reqwest::header::{self, AsHeaderName, HeaderMap};
 use tracing::warn;
 
