@@ -200,11 +200,11 @@ enable the `process` feature, you can integrate with external programs like
 with `yt-dlp` and `ffmpeg` (for post-processing) are also included.
 
 See
-[youtube_simple](https://github.com/aschey/stream-download-rs/blob/main/examples/youtube_simple.rs)
+[youtube_simple](https://github.com/aschey/stream-download-rs/blob/main/examples/examples/youtube_simple.rs)
 for a simple way to stream audio from a YouTube video.
 
 See
-[yt_dlp](https://github.com/aschey/stream-download-rs/blob/main/examples/yt_dlp.rs)
+[yt_dlp](https://github.com/aschey/stream-download-rs/blob/main/examples/examples/yt_dlp.rs)
 for a more complex example of handling different kinds of URLs with `yt-dlp`.
 
 ## Registry
@@ -218,7 +218,7 @@ use a
 to handle these cases.
 
 See the
-[example](https://github.com/aschey/stream-download-rs/blob/main/examples/registry/main.rs)
+[example](https://github.com/aschey/stream-download-rs/blob/main/examples/examples/registry/main.rs)
 for more info.
 
 ## Storage
@@ -357,7 +357,7 @@ for more details.
 
 If using `reqwest-middleware`, a retry policy can be used to handle transient
 server errors. See
-[retry_middleware](https://github.com/aschey/stream-download-rs/blob/main/examples/retry_middleware.rs)
+[retry_middleware](https://github.com/aschey/stream-download-rs/blob/main/examples/examples/retry_middleware.rs)
 for an example of adding retry middleware.
 
 ## Authentication and Other Customization
@@ -366,11 +366,11 @@ It's possible to customize your HTTP requests if you need to perform
 authentication or change other settings.
 
 See
-[client_options](https://github.com/aschey/stream-download-rs/blob/main/examples/client_options.rs)
+[client_options](https://github.com/aschey/stream-download-rs/blob/main/examples/examples/client_options.rs)
 for customizing the HTTP client builder.
 
 See
-[custom_client](https://github.com/aschey/stream-download-rs/blob/main/examples/custom_client.rs)
+[custom_client](https://github.com/aschey/stream-download-rs/blob/main/examples/examples/custom_client.rs)
 for dynamically modifying each HTTP request.
 
 ## Supported Rust Versions
