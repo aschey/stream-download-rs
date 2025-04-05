@@ -30,6 +30,13 @@ you can enable running `rustfmt` with nightly. See
 the command line, you can run `cargo +nightly fmt`. If you install the git
 hooks, these are checked before commit.
 
+## Tests
+
+The test suite can be rather slow. It's recommended to use our test
+configuration with `cargo make test`, which runs the tests with an increased
+thread count, or run `cargo nextest run` and set the `NEXTEST_TEST_THREADS`
+variable to something high (around 200 works well).
+
 ## Required Dev Packages
 
 Tests have a transitive dependency on the `alsa-sys` crate. That crate needs the
