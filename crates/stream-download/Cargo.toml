@@ -1,6 +1,6 @@
 [package]
 name = "stream-download"
-version = "0.18.0"
+version = "0.18.1"
 description = "A library for streaming content to a local cache"
 readme = "README.md"
 edition.workspace = true
