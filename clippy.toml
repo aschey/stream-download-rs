@@ -1,2 +1,2 @@
 allow-unwrap-in-tests = true
-doc-valid-idents = ["YouTube", "GitHub"]
+doc-valid-idents = ["YouTube", "GitHub", "OpenDAL"]

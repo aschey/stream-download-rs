@@ -153,7 +153,7 @@ impl OpendalStream {
         let stat = params.operator.stat(&params.path).await?;
 
         let content_length = stat.content_length();
-        let content_type = stat.content_type().map(|t| t.to_string());
+        let content_type = stat.content_type().map(ToString::to_string);
 
         let reader = params.operator.reader(&params.path).await?;
 
@@ -200,7 +200,7 @@ impl SourceStream for OpendalStream {
         };
 
         self.async_reader = async_reader
-            .map_err(|e| e.into())
+            .map_err(Into::into)
             .wrap_err("error creating async reader")?
             .compat();
         Ok(())
