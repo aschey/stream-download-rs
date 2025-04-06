@@ -26,6 +26,6 @@ tower = { workspace = true, features = ["make"] }
 reqwest-retry = { workspace = true }
 youtube_dl = { workspace = true, features = ["tokio"] }
 libmpv2 = { workspace = true }
-testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
+testcontainers-modules = { workspace = true, features = ["localstack"] }
 opendal = { workspace = true, features = ["services-s3"] }
 aws-sdk-s3 = { workspace = true }
