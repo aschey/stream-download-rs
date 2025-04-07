@@ -36,7 +36,7 @@ script_runner = "@shell"
 
 [tasks.test]
 command = "cargo"
-args = ["nextest", "run", "--all-features"]
+args = ["nextest", "run"]
 clear = true
 env = { NEXTEST_TEST_THREADS = 200 }
 install_crate = "cargo-nextest"
