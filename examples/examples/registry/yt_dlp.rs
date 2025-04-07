@@ -116,7 +116,7 @@ impl RegistryEntry<Result<Reader>> for YtDlpResolver {
             .cancel_on_drop(false);
         let reader = StreamDownload::new_process(
             params,
-            AdaptiveStorageProvider::new(
+            AdaptiveStorageProvider::with_same_provider(
                 TempStorageProvider::default(),
                 // ensure we have enough buffer space to store the prefetch data
                 NonZeroUsize::new((settings.get_prefetch_bytes() * 2) as usize).unwrap(),

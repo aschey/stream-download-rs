@@ -18,7 +18,7 @@ mod http;
 mod yt_dlp;
 
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
-type Downloader = StreamDownload<AdaptiveStorageProvider<TempStorageProvider>>;
+type Downloader = StreamDownload<AdaptiveStorageProvider<TempStorageProvider, TempStorageProvider>>;
 
 #[tokio::main]
 async fn main() -> Result<()> {

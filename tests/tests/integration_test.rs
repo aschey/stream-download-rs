@@ -570,7 +570,7 @@ fn adaptive<T>(
     #[values(true, false)] has_content_length: bool,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
 ) where
-    T: StorageProvider<Reader: RefUnwindSafe + UnwindSafe> + 'static,
+    T: StorageProvider + Clone + 'static,
 {
     let buf = SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
@@ -600,13 +600,14 @@ fn adaptive<T>(
             )
             .await
             .unwrap(),
-            AdaptiveStorageProvider::new(storage, NonZeroUsize::new(300 * 1024).unwrap()),
+            AdaptiveStorageProvider::with_same_provider(
+                storage,
+                NonZeroUsize::new(300 * 1024).unwrap(),
+            ),
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
         .unwrap();
-
-        assert_unwind_safe(&reader);
 
         let buf = spawn_blocking(move || {
             let mut buf = Vec::<u8>::new();

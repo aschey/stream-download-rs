@@ -26,9 +26,9 @@ pub trait StorageProvider: Send {
 }
 
 /// Trait used to read from a storage layer
-pub trait StorageReader: Read + Seek + Send {}
+pub trait StorageReader: Read + Seek + Send + Sync {}
 
-impl<T> StorageReader for T where T: Read + Seek + Send {}
+impl<T> StorageReader for T where T: Read + Seek + Send + Sync {}
 
 /// Handle for writing to the underlying storage layer.
 pub trait StorageWriter: Write + Seek + Send + 'static {}

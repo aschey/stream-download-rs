@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         url.parse()?,
         // use adaptive storage to keep the underlying size bounded when the stream has no content
         // length
-        AdaptiveStorageProvider::new(
+        AdaptiveStorageProvider::with_same_provider(
             TempStorageProvider::default(),
             // ensure we have enough buffer space to store the prefetch data
             NonZeroUsize::new((settings.get_prefetch_bytes() * 2) as usize).unwrap(),
