@@ -101,7 +101,7 @@ where
                 Ok((Self::Reader::Bounded(reader), Self::Writer::Bounded(writer)))
             }
             Some(length) => {
-                if length < self.buffer_size.get() as u64 {
+                if u64::try_from(self.buffer_size.get()).is_ok_and(|buffer| length <= buffer) {
                     // Small enough for fixed-length storage
                     let (reader, writer) = self.fixed_storage.into_reader_writer(Some(length))?;
                     Ok((Self::Reader::Fixed(reader), Self::Writer::Fixed(writer)))
