@@ -55,10 +55,20 @@ where
     F: StorageProvider,
     V: StorageProvider,
 {
-    /// Creates a new [`AdaptiveStorageProvider`]. The supplied buffer size is used to construct a
-    /// [`BoundedStorageReader`] when the stream's content length is unknown or smaller than the
-    /// buffer size.
-    pub fn new(fixed_storage: F, variable_storage: V, buffer_size: NonZeroUsize) -> Self {
+    /// Creates a new [`AdaptiveStorageProvider`] with separate providers for fixed and
+    /// variable-length storage.
+    ///
+    /// # Arguments
+    /// * `fixed_storage` - Provider for fixed-length storage, used for infinite streams (wrapped in
+    ///   [`BoundedStorageProvider`]) and finite streams smaller than or equal to `buffer_size`
+    /// * `variable_storage` - Provider for variable-length storage, used for finite streams larger
+    ///   than `buffer_size`
+    /// * `buffer_size` - Maximum size for using fixed-length storage
+    pub fn with_fixed_and_variable(
+        fixed_storage: F,
+        variable_storage: V,
+        buffer_size: NonZeroUsize,
+    ) -> Self {
         Self {
             buffer_size,
             fixed_storage,
@@ -71,13 +81,16 @@ impl<T> AdaptiveStorageProvider<T, T>
 where
     T: StorageProvider,
 {
-    /// Creates a new [`AdaptiveStorageProvider`] using the same provider type for both bounded
-    /// and unbounded storage.
-    pub fn with_same_provider(provider: T, buffer_size: NonZeroUsize) -> Self
+    /// Creates a new [`AdaptiveStorageProvider`] using the same provider type for both fixed
+    /// and variable-length storage.
+    ///
+    /// This is a convenience constructor that clones the provider and calls
+    /// [`with_fixed_and_variable`](Self::with_fixed_and_variable).
+    pub fn new(provider: T, buffer_size: NonZeroUsize) -> Self
     where
         T: Clone,
     {
-        Self::new(provider.clone(), provider, buffer_size)
+        Self::with_fixed_and_variable(provider.clone(), provider, buffer_size)
     }
 }
 

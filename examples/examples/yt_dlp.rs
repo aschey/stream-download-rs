@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .cancel_on_drop(false);
     let reader = StreamDownload::new_process(
         params,
-        AdaptiveStorageProvider::with_same_provider(
+        AdaptiveStorageProvider::new(
             TempStorageProvider::default(),
             // ensure we have enough buffer space to store the prefetch data
             NonZeroUsize::new((settings.get_prefetch_bytes() * 2) as usize).unwrap(),

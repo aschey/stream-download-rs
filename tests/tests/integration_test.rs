@@ -600,10 +600,7 @@ fn adaptive<T>(
             )
             .await
             .unwrap(),
-            AdaptiveStorageProvider::with_same_provider(
-                storage,
-                NonZeroUsize::new(300 * 1024).unwrap(),
-            ),
+            AdaptiveStorageProvider::new(storage, NonZeroUsize::new(300 * 1024).unwrap()),
             Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
