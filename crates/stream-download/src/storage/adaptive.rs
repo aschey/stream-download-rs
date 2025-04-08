@@ -2,78 +2,92 @@
 //!
 //! This module provides a way to use different storage strategies depending on the stream's
 //! characteristics:
-//! - For infinite streams: uses the bounded storage provider
-//! - For finite streams smaller than the buffer size: uses the bounded storage provider
-//! - For finite streams larger than the buffer size: uses the unbounded storage provider
+//! - Infinite streams use a fixed-length storage type wrapped in a [`BoundedStorageProvider`]
+//! - Finite streams smaller than or equal to the buffer size use the fixed-length storage type
+//!   directly
+//! - Finite streams larger than the buffer size use the variable-length storage type
 //!
-//! This is particularly useful for optimizing resource usage - for example, using memory-backed
-//! storage for small streams while falling back to file-backed storage for larger ones to avoid
-//! excessive memory usage.
+//! A typical use case is optimizing memory usage and reducing writes to persistent storage:
+//! ```ignore
+//! use std::num::NonZeroUsize;
+//! use stream_download::storage::{memory::MemoryStorageProvider, temp::TempStorageProvider};
+//! use stream_download::storage::adaptive::AdaptiveStorageProvider;
+//!
+//! // Use memory for small streams, temp files for large ones
+//! let provider = AdaptiveStorageProvider::new(
+//!     MemoryStorageProvider::new(),                // fixed-length: memory storage
+//!     TempStorageProvider::default(),              // variable-length: temp file storage
+//!     NonZeroUsize::new(8 * 1024 * 1024).unwrap(), // 8MB buffer size
+//! );
+//! ```
+//!
+//! This approach helps reduce wear on storage devices (SSDs, SD cards, etc.) by keeping smaller
+//! streams in memory while automatically switching to file storage for larger streams that would
+//! consume too much RAM.
 
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 
-use super::bounded::BoundedStorageProvider;
+use super::bounded::{BoundedStorageProvider, BoundedStorageReader, BoundedStorageWriter};
 use super::{StorageProvider, StorageReader, StorageWriter};
 
 /// Provides adaptive storage selection based on stream characteristics.
 ///
 /// Takes two storage providers:
-/// - `B`: Used for bounded storage for infinite streams or small finite streams
-/// - `U`: Used for unbounded storage for large finite streams
+/// - `F`: Fixed-length storage provider, used for:
+///   - Infinite streams (wrapped in [`BoundedStorageProvider`])
+///   - Finite streams smaller than or equal to the buffer size
+/// - `V`: Variable-length storage provider, used for:
+///   - Finite streams larger than the buffer size
 #[derive(Clone, Debug)]
-pub struct AdaptiveStorageProvider<B, U>
+pub struct AdaptiveStorageProvider<F, V>
 where
-    B: StorageProvider,
-    U: StorageProvider,
+    F: StorageProvider,
+    V: StorageProvider,
 {
     buffer_size: NonZeroUsize,
-    /// Storage provider used for infinite streams or finite streams smaller than `buffer_size`
-    bounded: B,
-    /// Storage provider used for finite streams larger than `buffer_size`
-    unbounded: U,
+    fixed_storage: F,
+    variable_storage: V,
 }
 
-impl<B, U> AdaptiveStorageProvider<B, U>
+impl<F, V> AdaptiveStorageProvider<F, V>
 where
-    B: StorageProvider,
-    U: StorageProvider,
+    F: StorageProvider,
+    V: StorageProvider,
 {
     /// Creates a new [`AdaptiveStorageProvider`]. The supplied buffer size is used to construct a
     /// [`BoundedStorageReader`] when the stream's content length is unknown or smaller than the
     /// buffer size.
-    pub fn new(bounded: B, unbounded: U, buffer_size: NonZeroUsize) -> Self {
+    pub fn new(fixed_storage: F, variable_storage: V, buffer_size: NonZeroUsize) -> Self {
         Self {
             buffer_size,
-            bounded,
-            unbounded,
+            fixed_storage,
+            variable_storage,
         }
     }
 }
 
-impl<P> AdaptiveStorageProvider<P, P>
+impl<T> AdaptiveStorageProvider<T, T>
 where
-    P: StorageProvider,
+    T: StorageProvider,
 {
     /// Creates a new [`AdaptiveStorageProvider`] using the same provider type for both bounded
     /// and unbounded storage.
-    pub fn with_same_provider(provider: P, buffer_size: NonZeroUsize) -> Self
+    pub fn with_same_provider(provider: T, buffer_size: NonZeroUsize) -> Self
     where
-        P: Clone,
+        T: Clone,
     {
         Self::new(provider.clone(), provider, buffer_size)
     }
 }
 
-impl<B, U> StorageProvider for AdaptiveStorageProvider<B, U>
+impl<F, V> StorageProvider for AdaptiveStorageProvider<F, V>
 where
-    B: StorageProvider,
-    U: StorageProvider,
-    B::Reader: 'static,
-    U::Reader: 'static,
+    F: StorageProvider,
+    V: StorageProvider,
 {
-    type Reader = AdaptiveReader;
-    type Writer = AdaptiveWriter;
+    type Reader = AdaptiveStorageReader<F::Reader, V::Reader>;
+    type Writer = AdaptiveStorageWriter<F::Writer, V::Writer>;
 
     fn into_reader_writer(
         self,
@@ -82,39 +96,22 @@ where
         match content_length {
             None => {
                 // For infinite streams, use bounded storage
-                let provider = BoundedStorageProvider::new(self.bounded, self.buffer_size);
+                let provider = BoundedStorageProvider::new(self.fixed_storage, self.buffer_size);
                 let (reader, writer) = provider.into_reader_writer(None)?;
-                Ok((
-                    AdaptiveReader {
-                        inner: AdaptiveReaderType::Bounded(Box::new(reader)),
-                    },
-                    AdaptiveWriter {
-                        inner: AdaptiveWriterType::Bounded(Box::new(writer)),
-                    },
-                ))
+                Ok((Self::Reader::Bounded(reader), Self::Writer::Bounded(writer)))
             }
             Some(length) => {
                 if length < self.buffer_size.get() as u64 {
-                    // Small enough for bounded storage
-                    let (reader, writer) = self.bounded.into_reader_writer(Some(length))?;
-                    Ok((
-                        AdaptiveReader {
-                            inner: AdaptiveReaderType::Bounded(Box::new(reader)),
-                        },
-                        AdaptiveWriter {
-                            inner: AdaptiveWriterType::Bounded(Box::new(writer)),
-                        },
-                    ))
+                    // Small enough for fixed-length storage
+                    let (reader, writer) = self.fixed_storage.into_reader_writer(Some(length))?;
+                    Ok((Self::Reader::Fixed(reader), Self::Writer::Fixed(writer)))
                 } else {
-                    // Too large, use unbounded storage
-                    let (reader, writer) = self.unbounded.into_reader_writer(Some(length))?;
+                    // Too large, use variable-length storage
+                    let (reader, writer) =
+                        self.variable_storage.into_reader_writer(Some(length))?;
                     Ok((
-                        AdaptiveReader {
-                            inner: AdaptiveReaderType::Unbounded(Box::new(reader)),
-                        },
-                        AdaptiveWriter {
-                            inner: AdaptiveWriterType::Unbounded(Box::new(writer)),
-                        },
+                        Self::Reader::Variable(reader),
+                        Self::Writer::Variable(writer),
                     ))
                 }
             }
@@ -122,65 +119,106 @@ where
     }
 }
 
-/// Reader that adaptively uses either bounded or unbounded storage
-pub struct AdaptiveReader {
-    inner: AdaptiveReaderType,
+/// Reader that adaptively uses either fixed-length or variable-length storage
+///
+/// The storage type used depends on the stream characteristics:
+/// - `Bounded`: For infinite streams, using fixed-length storage with size limits
+/// - `Fixed`: For finite streams smaller than or equal to the buffer size
+/// - `Variable`: For finite streams larger than the buffer size
+#[derive(Debug)]
+pub enum AdaptiveStorageReader<F, V>
+where
+    F: StorageReader,
+    V: StorageReader,
+{
+    /// Used for infinite streams, wrapping the fixed-length storage in a bounded buffer
+    Bounded(BoundedStorageReader<F>),
+    /// Used for finite streams smaller than or equal to the buffer size
+    Fixed(F),
+    /// Used for finite streams larger than the buffer size
+    Variable(V),
 }
 
-enum AdaptiveReaderType {
-    Bounded(Box<dyn StorageReader>),
-    Unbounded(Box<dyn StorageReader>),
-}
-
-impl Read for AdaptiveReader {
+impl<F, V> Read for AdaptiveStorageReader<F, V>
+where
+    F: StorageReader,
+    V: StorageReader,
+{
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match &mut self.inner {
-            AdaptiveReaderType::Bounded(r) => r.read(buf),
-            AdaptiveReaderType::Unbounded(r) => r.read(buf),
+        match self {
+            Self::Bounded(r) => r.read(buf),
+            Self::Fixed(r) => r.read(buf),
+            Self::Variable(r) => r.read(buf),
         }
     }
 }
 
-impl Seek for AdaptiveReader {
+impl<F, V> Seek for AdaptiveStorageReader<F, V>
+where
+    F: StorageReader,
+    V: StorageReader,
+{
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        match &mut self.inner {
-            AdaptiveReaderType::Bounded(r) => r.seek(pos),
-            AdaptiveReaderType::Unbounded(r) => r.seek(pos),
+        match self {
+            Self::Bounded(r) => r.seek(pos),
+            Self::Fixed(r) => r.seek(pos),
+            Self::Variable(r) => r.seek(pos),
         }
     }
 }
 
-/// Writer that adaptively uses either bounded or unbounded storage
-pub struct AdaptiveWriter {
-    inner: AdaptiveWriterType,
+/// Writer that adaptively uses either fixed-length or variable-length storage
+///
+/// The storage type used depends on the stream characteristics:
+/// - `Bounded`: For infinite streams, using fixed-length storage with size limits
+/// - `Fixed`: For finite streams smaller than or equal to the buffer size
+/// - `Variable`: For finite streams larger than the buffer size
+#[derive(Debug)]
+pub enum AdaptiveStorageWriter<F, V>
+where
+    F: StorageWriter,
+    V: StorageWriter,
+{
+    /// Used for infinite streams, wrapping the fixed-length storage in a bounded buffer
+    Bounded(BoundedStorageWriter<F>),
+    /// Used for finite streams smaller than or equal to the buffer size
+    Fixed(F),
+    /// Used for finite streams larger than the buffer size
+    Variable(V),
 }
 
-enum AdaptiveWriterType {
-    Bounded(Box<dyn StorageWriter>),
-    Unbounded(Box<dyn StorageWriter>),
-}
-
-impl Write for AdaptiveWriter {
+impl<F, V> Write for AdaptiveStorageWriter<F, V>
+where
+    F: StorageWriter,
+    V: StorageWriter,
+{
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match &mut self.inner {
-            AdaptiveWriterType::Bounded(w) => w.write(buf),
-            AdaptiveWriterType::Unbounded(w) => w.write(buf),
+        match self {
+            Self::Bounded(w) => w.write(buf),
+            Self::Fixed(w) => w.write(buf),
+            Self::Variable(w) => w.write(buf),
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match &mut self.inner {
-            AdaptiveWriterType::Bounded(w) => w.flush(),
-            AdaptiveWriterType::Unbounded(w) => w.flush(),
+        match self {
+            Self::Bounded(w) => w.flush(),
+            Self::Fixed(w) => w.flush(),
+            Self::Variable(w) => w.flush(),
         }
     }
 }
 
-impl Seek for AdaptiveWriter {
+impl<F, V> Seek for AdaptiveStorageWriter<F, V>
+where
+    F: StorageWriter,
+    V: StorageWriter,
+{
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        match &mut self.inner {
-            AdaptiveWriterType::Bounded(w) => w.seek(pos),
-            AdaptiveWriterType::Unbounded(w) => w.seek(pos),
+        match self {
+            Self::Bounded(w) => w.seek(pos),
+            Self::Fixed(w) => w.seek(pos),
+            Self::Variable(w) => w.seek(pos),
         }
     }
 }
