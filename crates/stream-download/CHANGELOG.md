@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.18.1..stream-download-v0.19.0) - 2025-04-09
+
+### Features
+
+-  [**breaking**] Flexible bounded and unbounded storage types for adaptive provider ([#185](https://github.com/aschey/stream-download-rs/issues/185)) - ([e00c2b8](https://github.com/aschey/stream-download-rs/commit/e00c2b8c3371f9a2dacb176c2efbbbdffda291e2))
+
 ## [0.18.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.18.0..stream-download-v0.18.1) - 2025-04-06
 
 ### Miscellaneous Tasks
