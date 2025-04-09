@@ -570,7 +570,7 @@ fn adaptive<T>(
     #[values(true, false)] has_content_length: bool,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
 ) where
-    T: StorageProvider<Reader: RefUnwindSafe + UnwindSafe> + 'static,
+    T: StorageProvider<Reader: RefUnwindSafe + UnwindSafe> + Clone + 'static,
 {
     let buf = SERVER_RT.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Command, oneshot::Sender<Duration>)>();
