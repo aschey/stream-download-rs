@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.19.0..stream-download-v0.19.1) - 2025-04-14
+
+### Miscellaneous Tasks
+
+- Remove deps.rs badge ([#188](https://github.com/aschey/stream-download-rs/issues/188)) - ([d4bdcab](https://github.com/aschey/stream-download-rs/commit/d4bdcab0ac350fa653617a347866f4b675edf2de))
+
 ## [0.19.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.18.1..stream-download-v0.19.0) - 2025-04-09
 
 ### Features
