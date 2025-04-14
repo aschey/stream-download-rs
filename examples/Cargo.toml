@@ -1,5 +1,5 @@
 [package]
-name = "examples"
+name = "stream-download-examples"
 publish = false
 edition.workspace = true
 license.workspace = true
