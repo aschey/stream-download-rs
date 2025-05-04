@@ -73,8 +73,7 @@ jobs:
 
   min-versions:
     name: Check min dependency versions
-    # newer ubuntu versions have problems with older versions of openssl-sys
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust nightly
