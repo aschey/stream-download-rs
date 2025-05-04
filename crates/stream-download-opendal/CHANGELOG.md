@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.1.2..stream-download-opendal-v0.1.3) - 2025-05-04
+
+### Miscellaneous Tasks
+
+- Remove deps.rs badge ([#188](https://github.com/aschey/stream-download-rs/issues/188)) - ([d4bdcab](https://github.com/aschey/stream-download-rs/commit/d4bdcab0ac350fa653617a347866f4b675edf2de))
+
 ## [0.1.2](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.1.1..stream-download-opendal-v0.1.2) - 2025-04-09
 
 ### Miscellaneous Tasks
