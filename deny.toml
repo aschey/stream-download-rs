@@ -13,6 +13,7 @@ allow = [
   "MPL-2.0",
   "OpenSSL",
   "Zlib",
+  "CDLA-Permissive-2.0",
 ]
 
 [[licenses.clarify]]

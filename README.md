@@ -110,8 +110,6 @@ trait. A few types of transports are provided out of the box:
 
 - [`http`](https://docs.rs/stream-download/latest/stream_download/http) for
   typical HTTP-based sources.
-- [`open_dal`](https://docs.rs/stream-download/latest/stream_download/open_dal)
-  which is more complex, but supports a large variety of services.
 - [`async_read`](https://docs.rs/stream-download/latest/stream_download/async_read)
   for any source implementing
   [`AsyncRead`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncRead.html).
