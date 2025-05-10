@@ -28,7 +28,7 @@ regex = "1.10.6"
 reqwest = { version = "0.12.2", default-features = false }
 reqwest-middleware = "0.4"
 tempfile = "3.1"
-thiserror = "2.0.1"
+thiserror = "2.0.3"
 tokio = "1.40"
 tokio-util = "0.7.10"
 tracing = "0.1.40"
