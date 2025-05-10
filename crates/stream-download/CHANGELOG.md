@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.19.1..stream-download-v0.20.0) - 2025-05-10
+
+### Miscellaneous Tasks
+
+- [**breaking**] Bump MSRV to 1.82 ([#193](https://github.com/aschey/stream-download-rs/issues/193)) - ([a9de53d](https://github.com/aschey/stream-download-rs/commit/a9de53de117521ff175dbb41b0eab64863b89dec))
+
 ## [0.19.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.19.0..stream-download-v0.19.1) - 2025-05-04
 
 ### Documentation
