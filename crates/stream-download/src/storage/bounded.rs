@@ -142,9 +142,6 @@ where
 {
     #[instrument(skip(buf))]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
         let mut shared_info = self.shared_info.lock();
 
         if buf.len() > shared_info.size {
@@ -158,11 +155,11 @@ where
             ));
         }
 
-        if shared_info
+        let available_len = shared_info
             .write_position
-            .saturating_sub(shared_info.read_position)
-            > shared_info.size
-        {
+            .saturating_sub(shared_info.read_position);
+
+        if available_len > shared_info.size {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
@@ -177,12 +174,19 @@ where
             return Ok(0);
         }
 
-        let available_len = shared_info.write_position - shared_info.read_position;
         let size = shared_info.size.min(shared_info.write_position);
+        let available_buf_size = available_len.min(buf.len());
+
+        trace!(buf_len = buf.len(), "original buf len");
+
+        let buf = &mut buf[..available_buf_size];
+        if buf.is_empty() {
+            return Ok(0);
+        }
 
         let start = shared_info.mapped_read_position(0);
         // is_empty check above prevents subtraction with overflow here
-        let end = shared_info.mapped_read_position(buf.len().min(available_len) - 1) + 1;
+        let end = shared_info.mapped_read_position(available_buf_size - 1) + 1;
         trace!(
             start,
             end,
@@ -192,22 +196,18 @@ where
             "bounded read"
         );
 
-        let read_len = if start <= end {
-            let read_len = end - start;
+        self.inner
+            .seek(SeekFrom::Start(start as u64))
+            .wrap_err("error seeking to mapped start")?;
+
+        if start <= end {
             self.inner
-                .seek(SeekFrom::Start(start as u64))
-                .wrap_err("error seeking to mapped start")?;
-            self.inner
-                .read_exact(&mut buf[..read_len])
+                .read_exact(buf)
                 .wrap_err("error reading mapped positions")?;
-            read_len
         } else {
             // buffer is non-contiguous, need to read the first segment and then wrap around to the
             // start to read the rest
             let first_seg_len = size - start;
-            self.inner
-                .seek(SeekFrom::Start(start as u64))
-                .wrap_err("error seeking first mapped segment")?;
             self.inner
                 .read_exact(&mut buf[..first_seg_len])
                 .wrap_err("error reading first mapped segment")?;
@@ -215,15 +215,15 @@ where
                 .seek(SeekFrom::Start(0))
                 .wrap_err("error seeking second mapped segment")?;
             self.inner
-                .read_exact(&mut buf[first_seg_len..first_seg_len + end])
+                .read_exact(&mut buf[first_seg_len..])
                 .wrap_err("error reading second mapped segment")?;
-            first_seg_len + end
         };
 
-        shared_info.read_position += read_len;
-        shared_info.read += read_len;
+        let buf_len = buf.len();
+        shared_info.read_position += buf_len;
+        shared_info.read += buf_len;
 
-        Ok(read_len)
+        Ok(buf_len)
     }
 }
 
@@ -275,6 +275,7 @@ where
             .write_position
             .saturating_sub(shared_info.read_position);
         let size = shared_info.size.saturating_sub(space_taken).min(buf.len());
+        trace!(buf_len = buf.len(), "original buf len");
         // If we don't have enough space to write the entire buffer, write as much as we can
         let buf = &buf[..size];
         if buf.is_empty() {
@@ -312,12 +313,13 @@ where
                 .wrap_err("error writing second mapped segment")?;
         }
 
-        shared_info.write_position += buf.len();
-        shared_info.written += buf.len();
+        let buf_len = buf.len();
+        shared_info.write_position += buf_len;
+        shared_info.written += buf_len;
 
         self.inner.flush().wrap_err("error flushing during write")?;
 
-        Ok(buf.len())
+        Ok(buf_len)
     }
 
     fn flush(&mut self) -> io::Result<()> {
