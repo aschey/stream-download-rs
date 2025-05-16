@@ -523,7 +523,7 @@ fn bounded<T>(
                 }
                 responder.send(Duration::from_millis(0)).ok();
             };
-            (rx, prefetch_size as usize)
+            (rx, prefetch_size)
         });
 
         let mut reader = StreamDownload::from_stream(

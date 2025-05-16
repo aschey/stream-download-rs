@@ -318,7 +318,7 @@ impl<C: Client> SourceStream for HttpStream<C> {
             // seek_range provides an exclusive end value, but we need it to be inclusive here
             .get_range(&self.url, start, end.map(|e| e - 1))
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+            .map_err(|e| io::Error::other(e.to_string()))
             .wrap_err(&format!("error sending HTTP range request to {}", self.url))?;
         debug!(
             duration = format!("{:?}", request_start.elapsed()),
@@ -329,7 +329,7 @@ impl<C: Client> SourceStream for HttpStream<C> {
             Ok(response) => Ok(response),
             Err(e) => {
                 let error = e.decode_error().await;
-                Err(io::Error::new(io::ErrorKind::Other, error)).wrap_err(&format!(
+                Err(io::Error::other(error)).wrap_err(&format!(
                     "error getting HTTP range response from {}",
                     self.url
                 ))
@@ -348,7 +348,7 @@ impl<C: Client> SourceStream for HttpStream<C> {
                 .client
                 .get(&self.url)
                 .await
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+                .map_err(|e| io::Error::other(e.to_string()))
                 .wrap_err(&format!("error sending HTTP request to {}", self.url))?;
             self.stream = Box::new(response.stream());
             Ok(())
