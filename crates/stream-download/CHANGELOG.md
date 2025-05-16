@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.20.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.19.1..stream-download-v0.20.0) - 2025-05-16
+
+### Miscellaneous Tasks
+
+- [**breaking**] Bump MSRV to 1.82 ([#193](https://github.com/aschey/stream-download-rs/issues/193)) - ([a9de53d](https://github.com/aschey/stream-download-rs/commit/a9de53de117521ff175dbb41b0eab64863b89dec))
+- [**breaking**] Bump MSRV to 1.85 ([#197](https://github.com/aschey/stream-download-rs/issues/197)) - ([f8c65c8](https://github.com/aschey/stream-download-rs/commit/f8c65c869663beafe787efa9dec773f7de1de2aa))
+
+### Refactor
+
+- Simplify ring buffer io::read implementation ([#195](https://github.com/aschey/stream-download-rs/issues/195)) - ([034c549](https://github.com/aschey/stream-download-rs/commit/034c5497ed8926ed03f65780dd4533ab2d73b538))
+- Apply clippy lints from Rust 1.87 ([#196](https://github.com/aschey/stream-download-rs/issues/196)) - ([f7a8e5f](https://github.com/aschey/stream-download-rs/commit/f7a8e5f5024ffbc5be6dd261268b0c21c5c44c91))
+
 ## [0.19.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.19.0..stream-download-v0.19.1) - 2025-05-04
 
 ### Documentation

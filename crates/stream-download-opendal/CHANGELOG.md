@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.1.3..stream-download-opendal-v0.1.4) - 2025-05-16
+
+### Miscellaneous Tasks
+
+- Update Cargo.toml dependencies - ([0000000](https://github.com/aschey/stream-download-rs/commit/0000000))
+
 ## [0.1.3](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.1.2..stream-download-opendal-v0.1.3) - 2025-05-04
 
 ### Miscellaneous Tasks
