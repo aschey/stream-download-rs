@@ -246,7 +246,7 @@ pub struct ErrorTestStorage(MemoryStorage);
 
 impl Write for ErrorTestStorage {
     fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::Other, "test error"))
+        Err(io::Error::other("test error"))
     }
 
     fn flush(&mut self) -> io::Result<()> {
