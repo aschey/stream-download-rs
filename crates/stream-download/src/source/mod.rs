@@ -15,6 +15,7 @@ use handle::{
     DownloadStatus, Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle,
 };
 use tokio::sync::mpsc;
+use tokio::task::yield_now;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace, warn};
@@ -123,6 +124,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     prefetch_bytes: u64,
+    batch_write_size: usize,
     retry_timeout: Duration,
     on_progress: Option<ProgressFn<S>>,
     on_reconnect: Option<ReconnectFn<S>>,
@@ -156,6 +158,7 @@ where
             content_length,
             prefetch_complete: settings.prefetch_bytes == 0,
             prefetch_bytes: settings.prefetch_bytes,
+            batch_write_size: settings.batch_write_size,
             retry_timeout: settings.retry_timeout,
             on_progress: settings.on_progress,
             on_reconnect: settings.on_reconnect,
@@ -282,7 +285,7 @@ where
 
             return self.finish_or_find_next_gap(stream).await;
         };
-        let written = self.writer.write(&bytes)?;
+        let written = self.write_batched(&bytes).await?;
         self.writer.flush()?;
 
         let stream_position = self.writer.stream_position()?;
@@ -324,6 +327,21 @@ where
         self.writer.flush()?;
         self.signal_download_complete();
         Ok(DownloadAction::Complete)
+    }
+
+    async fn write_batched(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let mut written = 0;
+        loop {
+            let write_size = self.batch_write_size.min(bytes[written..].len());
+            let batch_written = self.writer.write(&bytes[written..written + write_size])?;
+            if batch_written == 0 {
+                return Ok(written);
+            }
+            written += batch_written;
+            // yield between writes to ensure we don't spend too long on writes
+            // without an await point
+            yield_now().await;
+        }
     }
 
     async fn handle_bytes(
@@ -374,7 +392,7 @@ where
         // If the reader is falling behind, this may take several attempts.
         while written < bytes.len() {
             self.notify_read.request();
-            let new_written = self.writer.write(&bytes[written..])?;
+            let new_written = self.write_batched(&bytes[written..]).await?;
             trace!(written, new_written, len = bytes.len(), "wrote data");
 
             if new_written > 0 {

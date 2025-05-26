@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::time::Duration;
 
@@ -50,6 +51,7 @@ pub struct StreamState {
 pub struct Settings<S> {
     pub(crate) prefetch_bytes: u64,
     pub(crate) seek_buffer_size: usize,
+    pub(crate) batch_write_size: usize,
     pub(crate) retry_timeout: Duration,
     pub(crate) cancel_on_drop: bool,
     #[educe(Debug = false, PartialEq = false)]
@@ -63,6 +65,7 @@ impl<S> Default for Settings<S> {
         Self {
             prefetch_bytes: 256 * 1024,
             seek_buffer_size: 128,
+            batch_write_size: 4096,
             retry_timeout: Duration::from_secs(5),
             cancel_on_drop: true,
             on_progress: None,
@@ -94,6 +97,19 @@ impl<S> Settings<S> {
     pub fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
         Self {
             seek_buffer_size,
+            ..self
+        }
+    }
+
+    /// The maximum number of bytes written to the underlying
+    /// [`StorageWriter`](crate::storage::StorageWriter) before yielding to the async runtime. This
+    /// prevents large writes from performing long blocking operations without giving the scheduler
+    /// a chance to schedule other tasks.
+    ///
+    /// The default value is 4096.
+    pub fn batch_write_size(self, batch_write_size: NonZeroUsize) -> Self {
+        Self {
+            batch_write_size: batch_write_size.get(),
             ..self
         }
     }
@@ -172,6 +188,11 @@ impl<S> Settings<S> {
     /// Retrieves the configured seek buffer size
     pub const fn get_seek_buffer_size(&self) -> usize {
         self.seek_buffer_size
+    }
+
+    /// Retrieves the configured batch write size
+    pub const fn get_write_batch_size(&self) -> usize {
+        self.batch_write_size
     }
 }
 
