@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.2.0..stream-download-opendal-v0.2.1) - 2025-05-26
+
+### Miscellaneous Tasks
+
+- Updated the following local packages: stream-download - ([0000000](https://github.com/aschey/stream-download-rs/commit/0000000))
+
 ## [0.2.0](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.1.3..stream-download-opendal-v0.2.0) - 2025-05-16
 
 ### Miscellaneous Tasks

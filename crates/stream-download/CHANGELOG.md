@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.20.0..stream-download-v0.21.0) - 2025-05-26
+
+### Features
+
+- Batch large writes ([#198](https://github.com/aschey/stream-download-rs/issues/198)) - ([018cd4f](https://github.com/aschey/stream-download-rs/commit/018cd4f72d5619c2cd9e504b96b95ee7ebb13d81))
+- [**breaking**] Require nonzero seek buffer size ([#200](https://github.com/aschey/stream-download-rs/issues/200)) - ([05b621c](https://github.com/aschey/stream-download-rs/commit/05b621cd7b58645a3015fa65140aa40b2f49b452))
+
 ## [0.20.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.19.1..stream-download-v0.20.0) - 2025-05-16
 
 ### Miscellaneous Tasks
