@@ -500,6 +500,7 @@ fn retry_stuck_download(
 fn bounded<T>(
     #[values(0, 1, 128*1024-1, 128*1024)] prefetch_bytes: u64,
     #[values(256*1024, 300*1024)] bounded_length: usize,
+    #[values(4096, 128)] batch_write_size: usize,
     #[values(TempStorageProvider::default(), MemoryStorageProvider)] storage: T,
 ) where
     T: StorageProvider<Reader: RefUnwindSafe + UnwindSafe>,
@@ -536,7 +537,9 @@ fn bounded<T>(
             .await
             .unwrap(),
             BoundedStorageProvider::new(storage, NonZeroUsize::new(bounded_length).unwrap()),
-            Settings::default().prefetch_bytes(prefetch_bytes),
+            Settings::default()
+                .prefetch_bytes(prefetch_bytes)
+                .batch_write_size(NonZeroUsize::new(batch_write_size).unwrap()),
         )
         .await
         .unwrap();

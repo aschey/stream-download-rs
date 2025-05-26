@@ -200,7 +200,7 @@ where
             .seek(SeekFrom::Start(start as u64))
             .wrap_err("error seeking to mapped start")?;
 
-        if start <= end {
+        if start < end {
             self.inner
                 .read_exact(buf)
                 .wrap_err("error reading mapped positions")?;
