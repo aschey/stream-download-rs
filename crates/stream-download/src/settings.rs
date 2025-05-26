@@ -94,9 +94,9 @@ impl<S> Settings<S> {
     ///
     /// The default value is 128.
     #[must_use]
-    pub fn seek_buffer_size(self, seek_buffer_size: usize) -> Self {
+    pub fn seek_buffer_size(self, seek_buffer_size: NonZeroUsize) -> Self {
         Self {
-            seek_buffer_size,
+            seek_buffer_size: seek_buffer_size.get(),
             ..self
         }
     }
