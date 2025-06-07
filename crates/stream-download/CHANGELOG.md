@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.21.0..stream-download-v0.21.1) - 2025-06-07
+
+### Miscellaneous Tasks
+
+- Update Cargo.toml dependencies - ([0000000](https://github.com/aschey/stream-download-rs/commit/0000000))
+
 ## [0.21.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.20.0..stream-download-v0.21.0) - 2025-05-26
 
 ### Features
