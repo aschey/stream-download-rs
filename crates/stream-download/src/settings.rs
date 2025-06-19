@@ -50,7 +50,6 @@ pub struct StreamState {
 #[educe(Debug, PartialEq, Eq)]
 pub struct Settings<S> {
     pub(crate) prefetch_bytes: u64,
-    pub(crate) seek_buffer_size: usize,
     pub(crate) batch_write_size: usize,
     pub(crate) retry_timeout: Duration,
     pub(crate) cancel_on_drop: bool,
@@ -64,7 +63,6 @@ impl<S> Default for Settings<S> {
     fn default() -> Self {
         Self {
             prefetch_bytes: 256 * 1024,
-            seek_buffer_size: 128,
             batch_write_size: 4096,
             retry_timeout: Duration::from_secs(5),
             cancel_on_drop: true,
@@ -84,19 +82,6 @@ impl<S> Settings<S> {
     pub fn prefetch_bytes(self, prefetch_bytes: u64) -> Self {
         Self {
             prefetch_bytes,
-            ..self
-        }
-    }
-
-    /// The internal buffer size used to process seek requests.
-    /// You shouldn't need to mess with this unless your application performs a lot of seek
-    /// requests and you're seeing error messages from the buffer filling up.
-    ///
-    /// The default value is 128.
-    #[must_use]
-    pub fn seek_buffer_size(self, seek_buffer_size: NonZeroUsize) -> Self {
-        Self {
-            seek_buffer_size: seek_buffer_size.get(),
             ..self
         }
     }
@@ -183,11 +168,6 @@ impl<S> Settings<S> {
     /// Retrieves the configured prefetch bytes
     pub const fn get_prefetch_bytes(&self) -> u64 {
         self.prefetch_bytes
-    }
-
-    /// Retrieves the configured seek buffer size
-    pub const fn get_seek_buffer_size(&self) -> usize {
-        self.seek_buffer_size
     }
 
     /// Retrieves the configured batch write size

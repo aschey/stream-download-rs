@@ -27,31 +27,28 @@ impl SourceHandle {
         self.downloaded.get(position)
     }
 
-    pub(crate) fn request_position(&self, position: u64) {
-        self.requested_position.set(position);
+    pub(crate) fn wait_for_position(&self, requested_position: u64) {
+        self.request_position(requested_position);
+        debug!(
+            requested_position = requested_position,
+            "waiting for requested position"
+        );
+        self.notify_read.notify_waiting();
+        self.position_reached.wait_for_position_reached();
     }
 
-    pub(crate) fn wait_for_requested_position(&self) {
+    pub(crate) fn seek(&self, seek_position: u64) {
+        self.request_position(seek_position);
+        self.request_seek(seek_position);
+        debug!(
+            requested_position = seek_position,
+            "waiting for requested position"
+        );
         self.position_reached.wait_for_position_reached();
     }
 
     pub(crate) fn notify_read(&self) {
         self.notify_read.notify_read();
-    }
-
-    pub(crate) fn notify_waiting(&self) {
-        self.notify_read.notify_waiting();
-    }
-
-    pub(crate) fn seek(&self, position: u64) {
-        self.seek_tx
-            .try_send(position)
-            .inspect_err(|e| {
-                if let TrySendError::Full(capacity) = e {
-                    error!("Seek buffer full. Capacity: {capacity}");
-                }
-            })
-            .ok();
     }
 
     pub(crate) fn content_length(&self) -> Option<u64> {
@@ -60,6 +57,21 @@ impl SourceHandle {
 
     pub(crate) fn is_failed(&self) -> bool {
         self.download_status.is_failed()
+    }
+
+    fn request_position(&self, position: u64) {
+        self.requested_position.set(position);
+    }
+
+    fn request_seek(&self, position: u64) {
+        self.seek_tx
+            .try_send(position)
+            .inspect_err(|e| {
+                if let TrySendError::Full(_) = e {
+                    error!("Sent multiple seek requests without waiting");
+                }
+            })
+            .ok();
     }
 }
 

@@ -427,6 +427,10 @@ impl<P: StorageProvider> StreamDownload<P> {
                 debug!(seek_position = position, "seeking from start");
                 position
             }
+            SeekFrom::Current(position) => {
+                debug!(seek_position = position, "seeking from current position");
+                (self.output_reader.stream_position()? as i64 + position) as u64
+            }
             SeekFrom::End(position) => {
                 debug!(seek_position = position, "seeking from end");
                 if let Some(length) = self.handle.content_length() {
@@ -437,10 +441,6 @@ impl<P: StorageProvider> StreamDownload<P> {
                         "cannot seek from end when content length is unknown",
                     ));
                 }
-            }
-            SeekFrom::Current(position) => {
-                debug!(seek_position = position, "seeking from current position");
-                (self.output_reader.stream_position()? as i64 + position) as u64
             }
         })
     }
@@ -528,13 +528,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
             debug!("stream position not yet downloaded");
         }
 
-        self.handle.request_position(requested_position);
-        debug!(
-            requested_position = requested_position,
-            "waiting for requested position"
-        );
-        self.handle.notify_waiting();
-        self.handle.wait_for_requested_position();
+        self.handle.wait_for_position(requested_position);
         self.check_for_failure()?;
         debug!(
             current_position = stream_position,
@@ -570,13 +564,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
                 .inspect_err(|p| debug!(position = format!("{p:?}"), "returning seek position"));
         }
 
-        self.handle.request_position(absolute_seek_position);
         self.handle.seek(absolute_seek_position);
-        debug!(
-            requested_position = absolute_seek_position,
-            "waiting for requested position"
-        );
-        self.handle.wait_for_requested_position();
         self.check_for_failure()?;
         debug!("reached seek position");
 

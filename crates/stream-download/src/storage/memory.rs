@@ -74,7 +74,7 @@ impl Seek for MemoryStorage {
         let len = self.inner.read().len();
         let new_position = match position {
             SeekFrom::Start(position) => position as usize,
-            SeekFrom::Current(from_current) => ((self.position as i64) + from_current) as usize,
+            SeekFrom::Current(from_current) => (self.position as i64 + from_current) as usize,
             SeekFrom::End(from_end) => (len as i64 + from_end) as usize,
         };
 
