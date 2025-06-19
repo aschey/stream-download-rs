@@ -6,7 +6,6 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::future;
 use std::io::{self, SeekFrom};
-use std::ops::Range;
 use std::time::{Duration, Instant};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -237,7 +236,7 @@ where
     async fn handle_seek(&mut self, stream: &mut S, position: u64) -> io::Result<()> {
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
-
+            let current_stream_position = self.writer.stream_position()?;
             if self.prefetch_complete {
                 debug!("re-starting prefetch");
                 self.prefetch_start_position = position;
@@ -245,10 +244,29 @@ where
             } else {
                 debug!("seeking during prefetch, ending prefetch early");
                 self.downloaded
-                    .add(self.prefetch_start_position..self.writer.stream_position()?);
+                    .add(self.prefetch_start_position..current_stream_position);
                 self.prefetch_complete = true;
             }
-            self.seek(stream, position, None).await?;
+            if let Some(content_length) = self.content_length {
+                // Get the minimum possible start position to ensure we capture the entire range
+                let min_start_position = current_stream_position.min(position);
+                debug!(
+                    start = min_start_position,
+                    end = content_length,
+                    "checking for seek range",
+                );
+                let gap = self
+                    .downloaded
+                    .next_gap(min_start_position..content_length)
+                    .expect("already checked for a gap");
+                // Gap start may be too low if we're seeking forward, so check it against the
+                // position
+                let seek_start = gap.start.max(position);
+                debug!(seek_start, seek_end = gap.end, "requesting seek range");
+                self.seek(stream, seek_start, Some(gap.end)).await?;
+            } else {
+                self.seek(stream, position, None).await?;
+            }
         }
         Ok(())
     }
@@ -315,7 +333,7 @@ where
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
         if stream.supports_seek() {
             if let Some(content_length) = self.content_length {
-                let gap = self.get_download_gap(content_length);
+                let gap = self.downloaded.next_gap(0..content_length);
                 if let Some(gap) = gap {
                     debug!(
                         missing = format!("{gap:?}"),
@@ -451,11 +469,6 @@ where
         stream.seek_range(start, end).await?;
         self.writer.seek(SeekFrom::Start(start))?;
         Ok(())
-    }
-
-    fn get_download_gap(&self, content_length: u64) -> Option<Range<u64>> {
-        let range = 0..content_length;
-        self.downloaded.next_gap(&range)
     }
 
     fn signal_download_complete(&self) {
