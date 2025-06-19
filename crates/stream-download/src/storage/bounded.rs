@@ -234,21 +234,20 @@ where
     #[instrument]
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let mut shared_info = self.shared_info.lock();
-        let new_position = match position {
-            SeekFrom::Start(position) => position as usize,
-            SeekFrom::Current(from_current) => {
-                ((shared_info.read_position as i64) + from_current) as usize
-            }
-            SeekFrom::End(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "seek from end not supported",
-                ));
-            }
-        };
-
+        let new_position = handle_seek(position, shared_info.read_position)?;
         shared_info.read_position = new_position;
         Ok(new_position as u64)
+    }
+}
+
+fn handle_seek(position: SeekFrom, current_position: usize) -> io::Result<usize> {
+    match position {
+        SeekFrom::Start(position) => Ok(position as usize),
+        SeekFrom::Current(from_current) => Ok((current_position as i64 + from_current) as usize),
+        SeekFrom::End(_) => Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "seek from end not supported",
+        )),
     }
 }
 
@@ -334,19 +333,7 @@ where
     #[instrument]
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let mut shared_info = self.shared_info.lock();
-        let new_position = match position {
-            SeekFrom::Start(position) => position as usize,
-            SeekFrom::Current(from_current) => {
-                ((shared_info.write_position as i64) + from_current) as usize
-            }
-            SeekFrom::End(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "seek from end not supported",
-                ));
-            }
-        };
-
+        let new_position = handle_seek(position, shared_info.write_position)?;
         shared_info.write_position = new_position;
         Ok(new_position as u64)
     }

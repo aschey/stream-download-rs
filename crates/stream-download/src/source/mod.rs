@@ -145,7 +145,9 @@ where
         settings: Settings<S>,
         cancellation_token: CancellationToken,
     ) -> Self {
-        let (seek_tx, seek_rx) = mpsc::channel(settings.seek_buffer_size);
+        // buffer size of 1 is fine here because we wait for the position to update after we send
+        // each request
+        let (seek_tx, seek_rx) = mpsc::channel(1);
         Self {
             writer,
             downloaded: Downloaded::default(),
@@ -202,7 +204,8 @@ where
             let next_chunk = timeout(self.retry_timeout, stream.next());
             tokio::select! {
                 position = self.seek_rx.recv() => {
-                    self.handle_seek(stream, &position).await?;
+                    // seek_tx can't be dropped here since we keep a reference in this struct
+                    self.handle_seek(stream, position.expect("seek_tx dropped")).await?;
                 },
                 bytes = next_chunk => {
                     let Ok(bytes) = bytes else {
@@ -231,8 +234,7 @@ where
         Ok(StreamOutcome::Completed)
     }
 
-    async fn handle_seek(&mut self, stream: &mut S, position: &Option<u64>) -> io::Result<()> {
-        let position = position.expect("seek_tx dropped");
+    async fn handle_seek(&mut self, stream: &mut S, position: u64) -> io::Result<()> {
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
 
