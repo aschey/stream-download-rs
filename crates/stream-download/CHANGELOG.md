@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.21.1..stream-download-v0.22.0) - 2025-06-19
+
+### Refactor
+
+- [**breaking**] Remove seek_buffer_size ([#203](https://github.com/aschey/stream-download-rs/issues/203)) - ([66a6320](https://github.com/aschey/stream-download-rs/commit/66a6320191bca92e207a0aadd91ef05ab382f29f))
+
 ## [0.21.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.21.0..stream-download-v0.21.1) - 2025-06-07
 
 ### Miscellaneous Tasks
