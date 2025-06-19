@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.0..stream-download-v0.22.1) - 2025-06-19
+
+### Features
+
+- Prevent re-requesting previously downloaded stream portions during seek operations ([#205](https://github.com/aschey/stream-download-rs/issues/205)) - ([03f645a](https://github.com/aschey/stream-download-rs/commit/03f645aea81eb5455978792b6d3eb6bb7f90074e))
+
 ## [0.22.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.21.1..stream-download-v0.22.0) - 2025-06-19
 
 ### Refactor
