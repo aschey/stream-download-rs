@@ -164,8 +164,8 @@ impl Downloaded {
         self.0.read().get(&position).cloned()
     }
 
-    pub(super) fn next_gap(&self, range: &Range<u64>) -> Option<Range<u64>> {
-        self.0.read().gaps(range).next()
+    pub(super) fn next_gap(&self, range: Range<u64>) -> Option<Range<u64>> {
+        self.0.read().gaps(&range).next()
     }
 }
 
