@@ -23,6 +23,9 @@ still in progress.
 This library makes heavy use of the adapter pattern to allow for pluggable
 transports and storage implementations.
 
+**See the [blog post](https://aschey.tech/blog/streaming) for more info on the
+approach used here.**
+
 ## Installation
 
 ```sh
