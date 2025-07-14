@@ -49,8 +49,8 @@ async fn main() -> Result<()> {
     };
 
     let handle = tokio::task::spawn_blocking(move || {
-        let (_stream, handle) = rodio::OutputStream::try_default()?;
-        let sink = rodio::Sink::try_new(&handle)?;
+        let stream_handle = rodio::OutputStreamBuilder::open_default_stream()?;
+        let sink = rodio::Sink::connect_new(stream_handle.mixer());
         sink.append(rodio::Decoder::new(reader)?);
         sink.sleep_until_end();
 
