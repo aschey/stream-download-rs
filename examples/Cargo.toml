@@ -15,9 +15,7 @@ stream-download = { path = "../crates/stream-download", features = [
 stream-download-opendal = { path = "../crates/stream-download-opendal", optional = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
-rodio = { workspace = true, default-features = false, features = [
-  "symphonia-all",
-] }
+rodio = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
