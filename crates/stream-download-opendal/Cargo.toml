@@ -1,6 +1,6 @@
 [package]
 name = "stream-download-opendal"
-version = "0.4.1"
+version = "0.5.0"
 readme = "README.md"
 description = "OpenDAL adapter for stream-download"
 edition.workspace = true
@@ -14,7 +14,7 @@ categories.workspace = true
 keywords.workspace = true
 
 [dependencies]
-stream-download = { version = "0.22.1", path = "../stream-download", default-features = false }
+stream-download = { version = "0.22.2", path = "../stream-download", default-features = false }
 opendal = { workspace = true }
 pin-project-lite = { workspace = true }
 thiserror = { workspace = true }
