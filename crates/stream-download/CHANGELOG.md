@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.2](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.1..stream-download-v0.22.2) - 2025-07-17
+
+### Documentation
+
+- Add link to blog post ([#207](https://github.com/aschey/stream-download-rs/issues/207)) - ([c987899](https://github.com/aschey/stream-download-rs/commit/c987899cb52e3ff8fdf2780aed8c2b678d783925))
+
 ## [0.22.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.0..stream-download-v0.22.1) - 2025-06-19
 
 ### Features
