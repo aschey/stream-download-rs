@@ -520,7 +520,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
                 "current position already downloaded"
             );
             if closest_set.end >= requested_position {
-                debug!("requested position already downloaded");
+                trace!("requested position already downloaded");
                 return self.handle_read(buf);
             }
             debug!("requested position not yet downloaded");
