@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.3](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.2..stream-download-v0.22.3) - 2025-08-19
+
+### Dependencies
+
+- *(deps)* Update libmpv2 requirement from 4.1.0 to 5.0.0 ([#211](https://github.com/aschey/stream-download-rs/issues/211)) - ([8534126](https://github.com/aschey/stream-download-rs/commit/853412604755043d6c9958ffd404cfcd0e0c66bd))
+
+### Miscellaneous Tasks
+
+- Include license in build ([#219](https://github.com/aschey/stream-download-rs/issues/219)) - ([800428f](https://github.com/aschey/stream-download-rs/commit/800428f192703e8734ba7ce4488267ff126d9bb8))
+
 ## [0.22.2](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.1..stream-download-v0.22.2) - 2025-07-17
 
 ### Documentation
