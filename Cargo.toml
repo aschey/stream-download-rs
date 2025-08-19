@@ -10,7 +10,7 @@ authors = ["Austin Schey <aschey13@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aschey/stream-download-rs"
 homepage = "https://github.com/aschey/stream-download-rs"
-include = ["/src", "/examples", "/tests"]
+include = ["/src", "/examples", "/tests", "LICENSE-MIT", "LICENSE-APACHE"]
 categories = ["multimedia", "asynchronous", "caching"]
 keywords = ["audio", "stream", "media"]
 
