@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.5.0..stream-download-opendal-v0.5.1) - 2025-08-19
+
+### Miscellaneous Tasks
+
+- Include license in build ([#219](https://github.com/aschey/stream-download-rs/issues/219)) - ([800428f](https://github.com/aschey/stream-download-rs/commit/800428f192703e8734ba7ce4488267ff126d9bb8))
+
 ## [0.5.0](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.4.1..stream-download-opendal-v0.5.0) - 2025-07-17
 
 ### Miscellaneous Tasks
