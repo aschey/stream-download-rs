@@ -92,7 +92,7 @@ async fn setup_localstack_s3(
         s3::config::Credentials::new(ACCESS_KEY_ID, SECRET_ACCESS_KEY, None, None, "test");
 
     let s3_config = aws_sdk_s3::config::Builder::default()
-        .behavior_version(BehaviorVersion::v2025_01_17())
+        .behavior_version(BehaviorVersion::latest())
         .region(Region::new(REGION))
         .credentials_provider(dummy_credentials)
         .endpoint_url(&endpoint_url)
