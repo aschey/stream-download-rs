@@ -41,7 +41,17 @@ impl YtDlpCommand {
     /// Creates a [`Command`] from the given parameters.
     #[must_use]
     pub fn into_command(self) -> Command {
-        let mut cmd = Command::new(&self.cmd_name).args([&self.url, "--quiet", "-o", "-"]);
+        let mut cmd = Command::new(&self.cmd_name).args([
+            &self.url,
+            "--quiet",
+            // don't store .part files because they can conflict with each other during concurrent
+            // downloads
+            "--no-part",
+            // don't reuse previous fragments since they could be from a different file
+            "--no-continue",
+            "-o",
+            "-",
+        ]);
         if self.extract_audio {
             cmd = cmd.arg("-x");
         }
