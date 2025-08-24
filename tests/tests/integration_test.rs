@@ -305,6 +305,51 @@ fn tempfile_builder(
 }
 
 #[test]
+fn error_on_large_bounded_read() {
+    SERVER_RT.block_on(async move {
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", server_addr())
+                .parse()
+                .unwrap(),
+            BoundedStorageProvider::new(MemoryStorageProvider, 1024.try_into().unwrap()),
+            Settings::default(),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = vec![0; 2048];
+            let res = reader.read(&mut buf);
+            assert!(res.is_err());
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[test]
+fn error_on_large_bounded_seek() {
+    SERVER_RT.block_on(async move {
+        let mut reader = StreamDownload::new_http(
+            format!("http://{}/music.mp3", server_addr())
+                .parse()
+                .unwrap(),
+            BoundedStorageProvider::new(MemoryStorageProvider, 1024.try_into().unwrap()),
+            Settings::default(),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let res = reader.seek(SeekFrom::Start(2048));
+            assert!(res.is_err());
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[test]
 fn return_error() {
     SERVER_RT.block_on(async move {
         let mut reader = StreamDownload::new_http(

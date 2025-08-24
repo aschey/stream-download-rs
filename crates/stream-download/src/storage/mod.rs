@@ -23,6 +23,11 @@ pub trait StorageProvider: Send {
         self,
         content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)>;
+
+    /// Returns the maximum number of bytes this provider can hold at a time.
+    fn max_capacity(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Trait used to read from a storage layer

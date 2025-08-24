@@ -456,6 +456,7 @@ where
 
     fn should_seek(&mut self, stream: &S, position: u64) -> io::Result<bool> {
         if !stream.supports_seek() {
+            warn!("Attempting to seek, but it's unsupported. Waiting for stream to catch up.");
             return Ok(false);
         }
         Ok(if let Some(range) = self.downloaded.get(position) {

@@ -9,11 +9,10 @@
 //!
 //! Because the buffer will never resize, it's important to ensure the buffer is large enough to
 //! hold all of the data you will need at once. This needs to account for any seeking that may occur
-//! as well as the size of the initial prefetch phase.
+//! as well as the size of the initial prefetch phase. Attempting to read or seek outside the buffer
+//! will return an error.
 //!
 //! If the reader falls too far behind the writer, the writer will pause so the reader can catch up.
-//! However, if you attempt to seek backwards farther than the buffer size, the reader will
-//! return an error since that data has already been overwritten.
 //!
 //! If your inputs may or may not have a known content length, consider using an
 //! [`AdaptiveStorageProvider`](super::adaptive::AdaptiveStorageProvider) to automatically
@@ -65,6 +64,10 @@ where
 {
     type Reader = BoundedStorageReader<T::Reader>;
     type Writer = BoundedStorageWriter<T::Writer>;
+
+    fn max_capacity(&self) -> Option<usize> {
+        Some(self.buffer_size)
+    }
 
     fn into_reader_writer(
         self,
@@ -273,10 +276,10 @@ where
         let space_taken = shared_info
             .write_position
             .saturating_sub(shared_info.read_position);
-        let size = shared_info.size.saturating_sub(space_taken).min(buf.len());
-        trace!(buf_len = buf.len(), "original buf len");
+        let available_size = shared_info.size.saturating_sub(space_taken).min(buf.len());
+        trace!(available_size, buf_len = buf.len(), "calculated buf size");
         // If we don't have enough space to write the entire buffer, write as much as we can
-        let buf = &buf[..size];
+        let buf = &buf[..available_size];
         if buf.is_empty() {
             return Ok(0);
         }
