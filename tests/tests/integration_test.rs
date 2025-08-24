@@ -715,7 +715,7 @@ fn bounded_seek_near_beginning() {
 
         spawn_blocking(move || {
             while let Some((command, responder)) = rx.blocking_recv() {
-                responder.send(Duration::from_millis(0)).unwrap();
+                responder.send(Duration::from_millis(0)).ok();
                 if let Command::NextChunk(size) = command {
                     let buf_size = size - prev_size;
                     let mut temp_buf = vec![0; buf_size];
