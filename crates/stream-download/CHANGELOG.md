@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.4](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.3..stream-download-v0.22.4) - 2025-08-24
+
+### Bug Fixes
+
+- Prevent concurrent yt-dlp downloads from conflicting with each other ([#221](https://github.com/aschey/stream-download-rs/issues/221)) - ([38f6191](https://github.com/aschey/stream-download-rs/commit/38f6191651de0f06cd1a87f47a263c4b885589d0))
+- Return error from out-of-bounds read/seek instead of hanging ([#223](https://github.com/aschey/stream-download-rs/issues/223)) - ([d44698a](https://github.com/aschey/stream-download-rs/commit/d44698a6adde2e00a3b5a6bfb760c40dba1443c8))
+
 ## [0.22.3](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.2..stream-download-v0.22.3) - 2025-08-19
 
 ### Dependencies
