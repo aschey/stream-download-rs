@@ -67,6 +67,7 @@ pub struct StreamDownload<P: StorageProvider> {
     download_task_cancellation_token: CancellationToken,
     cancel_on_drop: bool,
     content_length: Option<u64>,
+    storage_capacity: Option<usize>,
 }
 
 impl<P: StorageProvider> StreamDownload<P> {
@@ -395,6 +396,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             .await
             .map_err(StreamInitializationError::StreamCreationFailure)?;
         let content_length = stream.content_length();
+        let storage_capacity = storage_provider.max_capacity();
         let (reader, writer) = storage_provider
             .into_reader_writer(content_length)
             .map_err(StreamInitializationError::StorageCreationFailure)?;
@@ -418,6 +420,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             download_task_cancellation_token: cancellation_token,
             cancel_on_drop,
             content_length,
+            storage_capacity,
         })
     }
 
@@ -469,6 +472,48 @@ impl<P: StorageProvider> StreamDownload<P> {
             Ok(())
         }
     }
+
+    fn check_for_excessive_read(&self, buf_len: usize) -> io::Result<()> {
+        // Ensure the buffer fits within the storage capacity.
+        // We could get around this from erroring by breaking this into multiple smaller reads, but
+        // if you're using a bounded storage type, that's probably not what you want.
+        let capacity = self.storage_capacity.unwrap_or(usize::MAX);
+        if buf_len > capacity {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("buffer size {buf_len} exceeds the max capacity of {capacity}",),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn check_for_excessive_seek(&mut self, absolute_seek_position: u64) -> io::Result<()> {
+        // Ensure the seek position is within the available storage capacity.
+        // We could get around this by issuing a few read requests until the seek position is within
+        // bounds, but if you're using a bounded storage type, that's probably not what you want.
+        if let Some(max_capacity) = self.storage_capacity {
+            let max_possible_seek_position = self
+                .output_reader
+                .stream_position()?
+                .saturating_add(max_capacity as u64);
+            if absolute_seek_position
+                > self
+                    .output_reader
+                    .stream_position()?
+                    .saturating_add(max_capacity as u64)
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "seek position {absolute_seek_position} exceeds maximum of \
+                         {max_possible_seek_position}"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Error returned when initializing a stream.
@@ -504,6 +549,7 @@ impl<P: StorageProvider> Read for StreamDownload<P> {
     #[instrument(skip_all, fields(len=buf.len()))]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.check_for_failure()?;
+        self.check_for_excessive_read(buf.len())?;
 
         trace!(buffer_length = buf.len(), "read requested");
         let stream_position = self.output_reader.stream_position()?;
@@ -548,6 +594,7 @@ impl<P: StorageProvider> Seek for StreamDownload<P> {
 
         let absolute_seek_position = self.get_absolute_seek_position(relative_position)?;
         let absolute_seek_position = self.normalize_requested_position(absolute_seek_position);
+        self.check_for_excessive_seek(absolute_seek_position)?;
 
         debug!(absolute_seek_position, "absolute seek position");
         if let Some(closest_set) = self
