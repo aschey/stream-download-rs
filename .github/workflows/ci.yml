@@ -46,7 +46,7 @@ jobs:
       - name: Test
         run: |
           cargo test --doc --all-features
-          NEXTEST_TEST_THREADS=24 RUST_LOG=trace cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
+          NEXTEST_TEST_THREADS=12 RUST_LOG=trace cargo llvm-cov nextest --all-features --codecov --ignore-filename-regex ".cargo|.*_test\.rs" > ./codecov.json
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         env:
