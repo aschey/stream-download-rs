@@ -47,7 +47,6 @@ aws-sdk-s3 = "1.82.0"
 axum = "0.8.3"
 proptest = "1.6.0"
 tower-http = "0.6.2"
-ctor = "0.5.0"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"

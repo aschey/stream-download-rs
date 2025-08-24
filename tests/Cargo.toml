@@ -26,6 +26,5 @@ regex = { workspace = true }
 bytes = { workspace = true }
 tower-http = { workspace = true, features = ["fs"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-ctor = { workspace = true }
 futures-util = { workspace = true }
 thiserror = { workspace = true }
