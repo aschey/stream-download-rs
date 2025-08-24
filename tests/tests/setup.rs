@@ -1,14 +1,13 @@
 use std::io::{self, Seek, SeekFrom, Write};
-use std::net::{SocketAddr, TcpListener};
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use axum::Router;
 use bytes::Bytes;
-use ctor::ctor;
 use futures_util::{Stream, StreamExt};
 use stream_download::http;
 use stream_download::source::DecodeError;
@@ -19,12 +18,14 @@ use tokio::sync::{mpsc, oneshot};
 use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 
-pub static SERVER_RT: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
-pub static SERVER_LISTENER: LazyLock<TcpListener> = LazyLock::new(|| {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    listener
+pub static SERVER_RT: LazyLock<Runtime> = LazyLock::new(|| {
+    let rt = Runtime::new().unwrap();
+    setup(&rt);
+    rt
 });
+
+pub static SERVER_ADDR: OnceLock<SocketAddr> = OnceLock::new();
+
 pub const ASSETS: &str = "../assets";
 
 pub fn music_path() -> String {
@@ -32,19 +33,19 @@ pub fn music_path() -> String {
 }
 
 pub fn server_addr() -> SocketAddr {
-    SERVER_LISTENER.local_addr().unwrap()
+    *SERVER_ADDR.get().unwrap()
 }
 
-#[ctor]
-fn setup() {
+fn setup(rt: &Runtime) {
     setup_logger();
-
-    let _guard = SERVER_RT.enter();
 
     let service = ServeDir::new(ASSETS);
     let router = Router::new().fallback_service(service);
-    let listener = SERVER_LISTENER.try_clone().unwrap();
-    SERVER_RT.spawn(async move {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+
+    SERVER_ADDR.set(listener.local_addr().unwrap()).unwrap();
+    rt.spawn(async move {
         let listener = tokio::net::TcpListener::from_std(listener).unwrap();
         axum::serve(listener, router).await.unwrap();
     });
