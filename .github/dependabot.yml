@@ -19,6 +19,13 @@ updates:
         update-types: ["version-update:semver-minor"]
       - dependency-name: "thiserror"
         update-types: ["version-update:semver-minor"]
+  - package-ecosystem: "rust-toolchain"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+    commit-message:
+      prefix: "chore"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
