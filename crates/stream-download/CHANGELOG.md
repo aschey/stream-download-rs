@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.5](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.4..stream-download-v0.22.5) - 2025-10-03
+
+### Miscellaneous Tasks
+
+- Remove doc_auto_cfg ([#229](https://github.com/aschey/stream-download-rs/issues/229)) - ([52fb237](https://github.com/aschey/stream-download-rs/commit/52fb2378fef9bd3c8d3f596164e1d899549b9198))
+
+
 ## [0.22.4](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.3..stream-download-v0.22.4) - 2025-08-24
 
 ### Bug Fixes
