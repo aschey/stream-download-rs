@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.6](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.5..stream-download-v0.22.6) - 2025-10-08
+
+### Bug Fixes
+
+- Reset read/write position when seeking in BoundedStorage ([#231](https://github.com/aschey/stream-download-rs/issues/231)) - ([244a260](https://github.com/aschey/stream-download-rs/commit/244a260379c5fa741716e34fb23ed824dca717fd))
+
+### Documentation
+
+- Fix config and broken doc example ([#232](https://github.com/aschey/stream-download-rs/issues/232)) - ([21c2544](https://github.com/aschey/stream-download-rs/commit/21c254498b557022c2c0835e629a4fd786a3674e))
+
+
 ## [0.22.5](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.4..stream-download-v0.22.5) - 2025-10-03
 
 ### Miscellaneous Tasks
