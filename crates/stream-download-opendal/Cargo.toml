@@ -25,6 +25,7 @@ bytes = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }
+opendal = { workspace = true, features = ["services-s3"] }
 
 [lints]
 workspace = true
