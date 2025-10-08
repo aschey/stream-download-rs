@@ -8,14 +8,16 @@
 //! - Finite streams larger than the buffer size use the variable-length storage type
 //!
 //! A typical use case is optimizing memory usage and reducing writes to persistent storage:
-//! ```ignore
+//! ```
 //! use std::num::NonZeroUsize;
-//! use stream_download::storage::{memory::MemoryStorageProvider, temp::TempStorageProvider};
+//!
 //! use stream_download::storage::adaptive::AdaptiveStorageProvider;
+//! use stream_download::storage::memory::MemoryStorageProvider;
+//! use stream_download::storage::temp::TempStorageProvider;
 //!
 //! // Use memory for small streams, temp files for large ones
-//! let provider = AdaptiveStorageProvider::new(
-//!     MemoryStorageProvider::new(),                // fixed-length: memory storage
+//! let provider = AdaptiveStorageProvider::with_fixed_and_variable(
+//!     MemoryStorageProvider,                       // fixed-length: memory storage
 //!     TempStorageProvider::default(),              // variable-length: temp file storage
 //!     NonZeroUsize::new(8 * 1024 * 1024).unwrap(), // 8MB buffer size
 //! );
