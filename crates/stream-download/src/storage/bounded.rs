@@ -236,8 +236,13 @@ where
 {
     #[instrument]
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        trace!("reader seek");
         let mut shared_info = self.shared_info.lock();
         let new_position = handle_seek(position, shared_info.read_position)?;
+        // If we performed a backwards seek,we need to adjust the absolute read position.
+        // Otherwise, if we've moved the read position back, but keep incrementing the
+        // read counter, it may look like we've read more bytes than we've written.
+        shared_info.read -= shared_info.read_position.saturating_sub(new_position);
         shared_info.read_position = new_position;
         Ok(new_position as u64)
     }
@@ -335,8 +340,10 @@ where
 {
     #[instrument]
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        trace!("writer seek");
         let mut shared_info = self.shared_info.lock();
         let new_position = handle_seek(position, shared_info.write_position)?;
+        shared_info.written -= shared_info.write_position.saturating_sub(new_position);
         shared_info.write_position = new_position;
         Ok(new_position as u64)
     }
