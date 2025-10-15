@@ -255,15 +255,13 @@ where
                     end = content_length,
                     "checking for seek range",
                 );
-                let gap = self
-                    .downloaded
-                    .next_gap(min_start_position..content_length)
-                    .expect("already checked for a gap");
-                // Gap start may be too low if we're seeking forward, so check it against the
-                // position
-                let seek_start = gap.start.max(position);
-                debug!(seek_start, seek_end = gap.end, "requesting seek range");
-                self.seek(stream, seek_start, Some(gap.end)).await?;
+                if let Some(gap) = self.downloaded.next_gap(min_start_position..content_length) {
+                    // Gap start may be too low if we're seeking forward, so check it against the
+                    // position
+                    let seek_start = gap.start.max(position);
+                    debug!(seek_start, seek_end = gap.end, "requesting seek range");
+                    self.seek(stream, seek_start, Some(gap.end)).await?;
+                }
             } else {
                 self.seek(stream, position, None).await?;
             }
