@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.7](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.6..stream-download-v0.22.7) - 2025-10-15
+
+### Bug Fixes
+
+- Handle case when no gap exists in downloaded ranges ([#234](https://github.com/aschey/stream-download-rs/issues/234)) - ([12bccbb](https://github.com/aschey/stream-download-rs/commit/12bccbb966180fd53b75b3ebef9a87b3d5e970f5))
+
+
 ## [0.22.6](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.5..stream-download-v0.22.6) - 2025-10-08
 
 ### Bug Fixes
