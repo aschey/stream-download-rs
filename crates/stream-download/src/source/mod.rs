@@ -247,6 +247,12 @@ where
                     .add(self.prefetch_start_position..current_stream_position);
                 self.prefetch_complete = true;
             }
+
+            let stream_content_length = stream.content_length();
+            if stream_content_length != self.content_length {
+                self.content_length = stream_content_length;
+            }
+
             if let Some(content_length) = self.content_length {
                 // Get the minimum possible start position to ensure we capture the entire range
                 let min_start_position = current_stream_position.min(position);
@@ -330,6 +336,11 @@ where
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
         if stream.supports_seek() {
+            let stream_content_length = stream.content_length();
+            if stream_content_length != self.content_length {
+                self.content_length = stream_content_length;
+            }
+
             if let Some(content_length) = self.content_length {
                 let gap = self.downloaded.next_gap(0..content_length);
                 if let Some(gap) = gap {
