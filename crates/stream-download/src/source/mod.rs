@@ -279,11 +279,11 @@ where
         if reconnect_pos
             .inspect_err(|e| warn!("error attempting to reconnect: {e:?}"))
             .is_ok()
+            && let Some(on_reconnect) = &mut self.on_reconnect
         {
-            if let Some(on_reconnect) = &mut self.on_reconnect {
-                on_reconnect(stream, &self.cancellation_token);
-            }
+            on_reconnect(stream, &self.cancellation_token);
         }
+
         Ok(())
     }
 
@@ -329,17 +329,17 @@ where
     }
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
-        if stream.supports_seek() {
-            if let Some(content_length) = self.content_length {
-                let gap = self.downloaded.next_gap(0..content_length);
-                if let Some(gap) = gap {
-                    debug!(
-                        missing = format!("{gap:?}"),
-                        "downloading missing stream chunk"
-                    );
-                    self.seek(stream, gap.start, Some(gap.end)).await?;
-                    return Ok(DownloadAction::Continue);
-                }
+        if stream.supports_seek()
+            && let Some(content_length) = self.content_length
+        {
+            let gap = self.downloaded.next_gap(0..content_length);
+            if let Some(gap) = gap {
+                debug!(
+                    missing = format!("{gap:?}"),
+                    "downloading missing stream chunk"
+                );
+                self.seek(stream, gap.start, Some(gap.end)).await?;
+                return Ok(DownloadAction::Continue);
             }
         }
         self.writer.flush()?;
