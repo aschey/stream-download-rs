@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.8](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.7..stream-download-v0.22.8) - 2025-11-01
+
+### Miscellaneous Tasks
+
+- Update MSRV to 1.88 ([#239](https://github.com/aschey/stream-download-rs/issues/239)) - ([428af8b](https://github.com/aschey/stream-download-rs/commit/428af8b0fd40e39f22801ded2beb37cec8556c4c))
+
+
 ## [0.22.7](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.6..stream-download-v0.22.7) - 2025-10-15
 
 ### Bug Fixes
