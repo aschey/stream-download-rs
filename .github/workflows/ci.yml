@@ -13,7 +13,7 @@ on:
   merge_group:
 
 env:
-  RUST_MIN: "1.85"
+  RUST_MIN: "1.88"
 
 jobs:
   test:

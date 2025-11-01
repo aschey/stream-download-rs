@@ -561,12 +561,13 @@ fn bounded<T>(
 
             let prefetch_size = loop {
                 let (command, responder) = rx.recv().await.unwrap();
-                if let Command::NextChunk(size) = command {
-                    if size >= prefetch_bytes as usize {
-                        responder.send(Duration::from_millis(0)).ok();
-                        break size;
-                    }
+                if let Command::NextChunk(size) = command
+                    && size >= prefetch_bytes as usize
+                {
+                    responder.send(Duration::from_millis(0)).ok();
+                    break size;
                 }
+
                 responder.send(Duration::from_millis(0)).ok();
             };
             (rx, prefetch_size)
