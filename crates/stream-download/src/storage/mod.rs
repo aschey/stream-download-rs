@@ -9,6 +9,23 @@ pub mod memory;
 #[cfg(feature = "temp-storage")]
 pub mod temp;
 
+/// Represents the length of the stream.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ContentLength {
+    /// Static length of the content.
+    Static(u64),
+    /// Dynamic length of the content.
+    Dynamic,
+    /// Unknown length of the content.
+    Unknown,
+}
+
+impl From<u64> for ContentLength {
+    fn from(value: u64) -> Self {
+        Self::Static(value)
+    }
+}
+
 /// Creates a [`StorageReader`] and [`StorageWriter`] based on the content
 /// length returned from the [`SourceStream`](crate::source::SourceStream).
 /// The reader and writer must track their position in the stream independently.
@@ -21,7 +38,7 @@ pub trait StorageProvider: Send {
     /// Turn the provider into a reader and writer.
     fn into_reader_writer(
         self,
-        content_length: Option<u64>,
+        content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)>;
 
     /// Returns the maximum number of bytes this provider can hold at a time.

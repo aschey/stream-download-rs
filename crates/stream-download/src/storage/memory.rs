@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use parking_lot::RwLock;
 
-use super::StorageProvider;
+use super::{ContentLength, StorageProvider};
 use crate::WrapIoResult;
 
 /// Creates a [`MemoryStorage`] with an initial size based on the supplied content length.
@@ -22,9 +22,13 @@ impl StorageProvider for MemoryStorageProvider {
 
     fn into_reader_writer(
         self,
-        content_length: Option<u64>,
+        content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
-        let initial_buffer_size = content_length.unwrap_or(0);
+        use ContentLength::*;
+        let initial_buffer_size = match content_length {
+            Static(size) => size,
+            Dynamic | Unknown => 0,
+        };
         let initial_buffer_size: usize = initial_buffer_size
             .try_into()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))

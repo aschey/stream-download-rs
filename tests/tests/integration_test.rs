@@ -15,11 +15,11 @@ use stream_download::async_read::AsyncReadStreamParams;
 use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::process::{self, ProcessStreamParams};
 use stream_download::source::SourceStream;
-use stream_download::storage::StorageProvider;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
+use stream_download::storage::{ContentLength, StorageProvider};
 use stream_download::{Settings, StreamDownload, StreamInitializationError, StreamState, http};
 use stream_download_opendal::{OpendalStream, OpendalStreamParams, StreamDownloadExt};
 use tokio::io::{AsyncRead, ReadBuf};
@@ -155,7 +155,10 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
         .unwrap();
 
         let file_buf = get_file_buf();
-        assert_eq!(file_buf.len() as u64, stream.content_length().unwrap());
+        assert_eq!(
+            ContentLength::Static(file_buf.len() as u64),
+            stream.content_length()
+        );
         assert_eq!(
             http::ContentType {
                 r#type: "audio".to_owned(),
@@ -202,7 +205,10 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
             .unwrap();
 
         let file_buf = get_file_buf();
-        assert_eq!(file_buf.len() as u64, stream.content_length().unwrap());
+        assert_eq!(
+            ContentLength::Static(file_buf.len() as u64),
+            stream.content_length()
+        );
         assert_eq!("audio/mpeg", stream.content_type().unwrap());
 
         let mut reader = StreamDownload::from_stream(
@@ -1082,7 +1088,7 @@ fn cancel_download(#[case] prefetch_bytes: u64) {
 #[case(1)]
 #[case(1024)]
 fn on_progress(#[case] prefetch_bytes: u64) {
-    let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<(ContentLength, StreamState)>();
 
     SERVER_RT.block_on(async move {
         let progress_task = tokio::spawn(async move {
@@ -1111,7 +1117,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
                     stream_download::StreamPhase::Downloading { .. }
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    return next.0.unwrap();
+                    return next.0;
                 }
             }
         });
@@ -1142,13 +1148,16 @@ fn on_progress(#[case] prefetch_bytes: u64) {
         });
         let read_bytes = read_bytes.await.unwrap();
         let last_content_length = progress_task.await.unwrap();
-        assert_eq!(read_bytes as u64, last_content_length);
+        assert_eq!(
+            ContentLength::Static(read_bytes as u64),
+            last_content_length
+        );
     });
 }
 
 #[rstest]
 fn on_progress_no_prefetch() {
-    let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<(ContentLength, StreamState)>();
 
     SERVER_RT.block_on(async move {
         let progress_task = tokio::spawn(async move {
@@ -1164,7 +1173,7 @@ fn on_progress_no_prefetch() {
                     stream_download::StreamPhase::Downloading { .. }
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    return next.0.unwrap();
+                    return next.0;
                 }
             }
         });
@@ -1195,14 +1204,17 @@ fn on_progress_no_prefetch() {
         });
         let read_bytes = read_bytes.await.unwrap();
         let last_content_length = progress_task.await.unwrap();
-        assert_eq!(read_bytes as u64, last_content_length);
+        assert_eq!(
+            ContentLength::Static(read_bytes as u64),
+            last_content_length
+        );
     });
 }
 
 #[rstest]
 #[case(512*1024)]
 fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
-    let (tx, mut rx) = mpsc::unbounded_channel::<(Option<u64>, StreamState)>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<(ContentLength, StreamState)>();
 
     SERVER_RT.block_on(async move {
         let progress_task = tokio::spawn(async move {
@@ -1218,7 +1230,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
                     stream_download::StreamPhase::Prefetching { .. },
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    return next.0.unwrap();
+                    return next.0;
                 }
             }
         });
@@ -1249,7 +1261,10 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
         });
         let read_bytes = read_bytes.await.unwrap();
         let last_content_length = progress_task.await.unwrap();
-        assert_eq!(read_bytes as u64, last_content_length);
+        assert_eq!(
+            ContentLength::Static(read_bytes as u64),
+            last_content_length
+        );
     });
 }
 

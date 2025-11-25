@@ -10,6 +10,7 @@ use libmpv2::protocol::Protocol;
 use reqwest::Client;
 use stream_download::http::HttpStream;
 use stream_download::source::{DecodeError, SourceStream};
+use stream_download::storage::ContentLength;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
@@ -80,7 +81,10 @@ fn open(_: &mut (), uri: &str) -> Stream {
     handle
         .block_on(async move {
             let stream = HttpStream::<Client>::create(uri["stream://".len()..].parse()?).await?;
-            let content_length = stream.content_length().unwrap_or_default();
+            let content_length = match stream.content_length() {
+                ContentLength::Static(content_length) => content_length,
+                ContentLength::Dynamic | ContentLength::Unknown => 0,
+            };
             let reader = match StreamDownload::from_stream(
                 stream,
                 TempStorageProvider::new(),

@@ -45,6 +45,7 @@ use tracing::{debug, instrument, warn};
 
 use crate::WrapIoResult;
 use crate::source::{DecodeError, SourceStream};
+use crate::storage::ContentLength;
 
 #[cfg(feature = "reqwest")]
 pub mod reqwest_client;
@@ -179,7 +180,7 @@ pub struct HttpStream<C: Client> {
             + Sync,
     >,
     client: C,
-    content_length: Option<u64>,
+    content_length: ContentLength,
     content_type: Option<ContentType>,
     #[educe(Debug(method = "fmt"))]
     url: C::Url,
@@ -212,11 +213,11 @@ impl<C: Client> HttpStream<C> {
         let content_length = response.content_length().map_or_else(
             || {
                 warn!("content length header missing");
-                None
+                ContentLength::Unknown
             },
             |content_length| {
                 debug!(content_length, "received content length");
-                Some(content_length)
+                ContentLength::Static(content_length)
             },
         );
 
@@ -292,13 +293,13 @@ impl<C: Client> SourceStream for HttpStream<C> {
         Self::new(C::create(), params).await
     }
 
-    fn content_length(&self) -> Option<u64> {
+    fn content_length(&self) -> ContentLength {
         self.content_length
     }
 
     #[instrument(skip(self))]
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
-        if Some(start) == self.content_length {
+        if ContentLength::Static(start) == self.content_length {
             debug!(
                 "attempting to seek where start is the length of the stream, returning empty \
                  stream"
