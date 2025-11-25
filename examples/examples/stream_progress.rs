@@ -50,12 +50,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     );
                 }
                 StreamPhase::Downloading { chunk_size, .. } => {
-                    let content_length = match stream.content_length() {
-                        ContentLength::Static(length) => length,
-                        ContentLength::Dynamic | ContentLength::Unknown => {
-                            panic!("Unknown content length")
-                        }
-                    };
+                    let content_length = stream.content_length();
+                    assert!(
+                        content_length != ContentLength::Unknown,
+                        "Content length is unknown"
+                    );
+
+                    let content_length: u64 = content_length.into();
                     info!(
                         "{:.2?} download progress {:.2}% downloaded: {:?} kb/s: {:.2}",
                         state.elapsed,

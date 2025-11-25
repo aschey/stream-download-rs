@@ -142,12 +142,12 @@ impl<S> Settings<S> {
     ///
     /// let settings = Settings::default();
     /// settings.on_progress(|stream: &HttpStream<Client>, state, _| {
-    ///     let content_length = match stream.content_length() {
-    ///         ContentLength::Static(length) => length,
-    ///         ContentLength::Dynamic | ContentLength::Unknown => {
-    ///             panic!("Unknown content length")
-    ///         }
-    ///     };
+    ///     let content_length = stream.content_length();
+    ///     assert!(
+    ///         content_length != ContentLength::Unknown,
+    ///         "Content length is unknown"
+    ///     );
+    ///     let content_length: u64 = content_length.into();
     ///     let progress = state.current_position as f32 / content_length as f32;
     ///     println!("progress: {}%", progress * 100.0);
     /// });

@@ -9,20 +9,119 @@ pub mod memory;
 #[cfg(feature = "temp-storage")]
 pub mod temp;
 
-/// Represents the length of the stream.
+/// Represents a content length that can change during processing.
+///
+/// This structure holds:
+/// - `reported`: The length of the content as reported by the server (e.g., Content-Range header).
+/// - `gathered`: The actual length of the content after processing
+/// (e.g., decryption, decompression), or `None` if the final value is not yet known
+/// (still being calculated or accumulated).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DynamicLength {
+    /// The length of the content as reported by the server, for example, via Content-Range header.
+    pub reported: u64,
+    /// The actual content length gathered after all processing.
+    /// This remains `None` until the entire content is processed and its final length determined.
+    pub gathered: Option<u64>,
+}
+
+/// Describes the possible states for the length of a stream or content resource.
+///
+/// `ContentLength` distinguishes between content with a fixed, knowable size,
+/// content whose final size is determined only after processing,
+/// and content where the length is unknown.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ContentLength {
-    /// Static length of the content.
+    /// Static content length that remains constant throughout processing.
+    ///
+    /// Contains the exact number of bytes in the content as reported by the server or known
+    /// beforehand. This value does not change during decryption, decompression, or any form of
+    /// data transformation.
+    ///
+    /// Examples:
+    /// - Regular file downloads
+    /// - Static media files with a fixed size
+    /// - HTTP responses with a `Content-Length` header
     Static(u64),
-    /// Dynamic length of the content.
-    Dynamic,
-    /// Unknown length of the content.
+
+    /// Dynamic content length that may change during reading or processing.
+    ///
+    /// The [`DynamicLength`] structure stores both the initially reported length from the server,
+    /// and the accumulated "gathered" length as chunks are processed.
+    /// `gathered` may temporarily be `None` until the content is fully processed
+    /// (for example, for decrypted, transformed, or recomposed streams).
+    ///
+    /// Examples:
+    /// - Encrypted streams/files (where decrypted size may differ)
+    /// - Compressed streams/files (expanding during decompression)
+    /// - Media content assembled from segments
+    Dynamic(DynamicLength),
+
+    /// Unknown content length.
+    ///
+    /// Used when the server does not provide content length information
+    /// and it cannot be determined up front.
+    /// This is typical for live streaming, HTTP chunked transfer, or similar scenarios.
+    ///
+    /// Examples:
+    /// - Live streams without a defined end
+    /// - HTTP chunked responses
+    /// - Server responses lacking any length information
     Unknown,
+}
+
+impl From<u64> for DynamicLength {
+    fn from(value: u64) -> Self {
+        Self {
+            reported: value,
+            gathered: None,
+        }
+    }
 }
 
 impl From<u64> for ContentLength {
     fn from(value: u64) -> Self {
         Self::Static(value)
+    }
+}
+
+impl From<DynamicLength> for ContentLength {
+    fn from(value: DynamicLength) -> Self {
+        Self::Dynamic(value)
+    }
+}
+
+impl Into<u64> for ContentLength {
+    fn into(self) -> u64 {
+        match self {
+            Self::Static(len) => len,
+            Self::Dynamic(len) => len.gathered.unwrap_or_default(),
+            Self::Unknown => 0,
+        }
+    }
+}
+
+impl PartialEq<u64> for ContentLength {
+    fn eq(&self, other: &u64) -> bool {
+        match self {
+            Self::Static(len) => len == other,
+            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported).max(len.reported) == *other,
+            Self::Unknown => false,
+        }
+    }
+}
+
+impl PartialOrd<u64> for ContentLength {
+    fn partial_cmp(&self, other: &u64) -> Option<std::cmp::Ordering> {
+        match self {
+            Self::Static(len) => len.partial_cmp(other),
+            Self::Dynamic(len) => len
+                .gathered
+                .unwrap_or(len.reported)
+                .max(len.reported)
+                .partial_cmp(other),
+            Self::Unknown => None,
+        }
     }
 }
 

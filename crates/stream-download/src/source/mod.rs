@@ -238,6 +238,7 @@ where
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
             let current_stream_position = self.writer.stream_position()?;
+            let content_length = self.content_length;
             if self.prefetch_complete {
                 debug!("re-starting prefetch");
                 self.prefetch_start_position = position;
@@ -248,10 +249,11 @@ where
                     .add(self.prefetch_start_position..current_stream_position);
                 self.prefetch_complete = true;
             }
-            match self.content_length {
-                Static(content_length) => {
+            match content_length {
+                Static(_) | Dynamic(_) => {
                     // Get the minimum possible start position to ensure we capture the entire range
                     let min_start_position = current_stream_position.min(position);
+                    let content_length = content_length.into();
                     debug!(
                         start = min_start_position,
                         end = content_length,
@@ -266,7 +268,7 @@ where
                         self.seek(stream, seek_start, Some(gap.end)).await?;
                     }
                 }
-                Dynamic | Unknown => {
+                Unknown => {
                     self.seek(stream, position, None).await?;
                 }
             }

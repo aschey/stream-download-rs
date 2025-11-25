@@ -27,7 +27,8 @@ impl StorageProvider for MemoryStorageProvider {
         use ContentLength::*;
         let initial_buffer_size = match content_length {
             Static(size) => size,
-            Dynamic | Unknown => 0,
+            Dynamic(size) => size.reported,
+            Unknown => 0,
         };
         let initial_buffer_size: usize = initial_buffer_size
             .try_into()
