@@ -147,8 +147,8 @@ impl<S> Settings<S> {
     ///         content_length != ContentLength::Unknown,
     ///         "Content length is unknown"
     ///     );
-    ///     let content_length: u64 = content_length.into();
-    ///     let progress = state.current_position as f32 / content_length as f32;
+    ///     let content_length: Option<u64> = content_length.into();
+    ///     let progress = state.current_position as f32 / content_length.unwrap() as f32;
     ///     println!("progress: {}%", progress * 100.0);
     /// });
     /// ```

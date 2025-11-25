@@ -10,7 +10,6 @@ use libmpv2::protocol::Protocol;
 use reqwest::Client;
 use stream_download::http::HttpStream;
 use stream_download::source::{DecodeError, SourceStream};
-use stream_download::storage::ContentLength;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 use tracing_subscriber::EnvFilter;
@@ -81,10 +80,8 @@ fn open(_: &mut (), uri: &str) -> Stream {
     handle
         .block_on(async move {
             let stream = HttpStream::<Client>::create(uri["stream://".len()..].parse()?).await?;
-            let content_length = match stream.content_length() {
-                ContentLength::Static(content_length) => content_length,
-                ContentLength::Dynamic | ContentLength::Unknown => 0,
-            };
+            let content_length: Option<u64> = stream.content_length().into();
+            let content_length = content_length.unwrap_or_default();
             let reader = match StreamDownload::from_stream(
                 stream,
                 TempStorageProvider::new(),
@@ -111,6 +108,7 @@ fn read(stream: &mut Stream, buf: &mut [i8]) -> i64 {
 }
 
 #[expect(clippy::boxed_local)]
+#[allow(unfulfilled_lint_expectations)]
 fn close(stream: Box<Stream>) {
     stream.reader.cancel_download();
 }

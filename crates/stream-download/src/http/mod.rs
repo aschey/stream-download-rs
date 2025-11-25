@@ -299,7 +299,8 @@ impl<C: Client> SourceStream for HttpStream<C> {
 
     #[instrument(skip(self))]
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
-        if ContentLength::Static(start) == self.content_length {
+        let content_length: Option<u64> = self.content_length.into();
+        if Some(start) == content_length {
             debug!(
                 "attempting to seek where start is the length of the stream, returning empty \
                  stream"

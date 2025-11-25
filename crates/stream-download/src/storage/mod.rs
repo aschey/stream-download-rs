@@ -13,9 +13,9 @@ pub mod temp;
 ///
 /// This structure holds:
 /// - `reported`: The length of the content as reported by the server (e.g., Content-Range header).
-/// - `gathered`: The actual length of the content after processing
-/// (e.g., decryption, decompression), or `None` if the final value is not yet known
-/// (still being calculated or accumulated).
+/// - `gathered`: The actual length of the content after processing (e.g., decryption,
+///   decompression), or `None` if the final value is not yet known (still being calculated or
+///   accumulated).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct DynamicLength {
     /// The length of the content as reported by the server, for example, via Content-Range header.
@@ -70,15 +70,6 @@ pub enum ContentLength {
     Unknown,
 }
 
-impl From<u64> for DynamicLength {
-    fn from(value: u64) -> Self {
-        Self {
-            reported: value,
-            gathered: None,
-        }
-    }
-}
-
 impl From<u64> for ContentLength {
     fn from(value: u64) -> Self {
         Self::Static(value)
@@ -91,12 +82,12 @@ impl From<DynamicLength> for ContentLength {
     }
 }
 
-impl Into<u64> for ContentLength {
-    fn into(self) -> u64 {
-        match self {
-            Self::Static(len) => len,
-            Self::Dynamic(len) => len.gathered.unwrap_or_default(),
-            Self::Unknown => 0,
+impl From<ContentLength> for Option<u64> {
+    fn from(val: ContentLength) -> Self {
+        match val {
+            ContentLength::Static(len) => Some(len),
+            ContentLength::Dynamic(len) => Some(len.gathered.unwrap_or_default()),
+            ContentLength::Unknown => None,
         }
     }
 }
