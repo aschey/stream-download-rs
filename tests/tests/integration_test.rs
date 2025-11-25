@@ -155,10 +155,8 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
         .unwrap();
 
         let file_buf = get_file_buf();
-        assert_eq!(
-            ContentLength::Static(file_buf.len() as u64),
-            stream.content_length()
-        );
+        let content_length: Option<u64> = stream.content_length().into();
+        assert_eq!(file_buf.len() as u64, content_length.unwrap());
         assert_eq!(
             http::ContentType {
                 r#type: "audio".to_owned(),
@@ -205,10 +203,8 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
             .unwrap();
 
         let file_buf = get_file_buf();
-        assert_eq!(
-            ContentLength::Static(file_buf.len() as u64),
-            stream.content_length()
-        );
+        let content_length: Option<u64> = stream.content_length().into();
+        assert_eq!(file_buf.len() as u64, content_length.unwrap());
         assert_eq!("audio/mpeg", stream.content_type().unwrap());
 
         let mut reader = StreamDownload::from_stream(
@@ -1117,7 +1113,8 @@ fn on_progress(#[case] prefetch_bytes: u64) {
                     stream_download::StreamPhase::Downloading { .. }
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    return next.0;
+                    let content_length: Option<u64> = next.0.into();
+                    return content_length.unwrap();
                 }
             }
         });
@@ -1148,10 +1145,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
         });
         let read_bytes = read_bytes.await.unwrap();
         let last_content_length = progress_task.await.unwrap();
-        assert_eq!(
-            ContentLength::Static(read_bytes as u64),
-            last_content_length
-        );
+        assert_eq!(read_bytes as u64, last_content_length);
     });
 }
 
@@ -1173,7 +1167,8 @@ fn on_progress_no_prefetch() {
                     stream_download::StreamPhase::Downloading { .. }
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    return next.0;
+                    let content_length: Option<u64> = next.0.into();
+                    return content_length.unwrap();
                 }
             }
         });
@@ -1204,10 +1199,7 @@ fn on_progress_no_prefetch() {
         });
         let read_bytes = read_bytes.await.unwrap();
         let last_content_length = progress_task.await.unwrap();
-        assert_eq!(
-            ContentLength::Static(read_bytes as u64),
-            last_content_length
-        );
+        assert_eq!(read_bytes as u64, last_content_length);
     });
 }
 
@@ -1230,7 +1222,8 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
                     stream_download::StreamPhase::Prefetching { .. },
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    return next.0;
+                    let content_length: Option<u64> = next.0.into();
+                    return content_length.unwrap();
                 }
             }
         });
@@ -1261,10 +1254,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
         });
         let read_bytes = read_bytes.await.unwrap();
         let last_content_length = progress_task.await.unwrap();
-        assert_eq!(
-            ContentLength::Static(read_bytes as u64),
-            last_content_length
-        );
+        assert_eq!(read_bytes as u64, last_content_length);
     });
 }
 

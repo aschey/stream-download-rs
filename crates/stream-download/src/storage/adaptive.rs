@@ -108,15 +108,14 @@ where
         self,
         content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
-        use ContentLength::*;
         match content_length {
-            Unknown => {
+            ContentLength::Unknown => {
                 // For infinite streams, use bounded storage
                 let provider = BoundedStorageProvider::new(self.fixed_storage, self.buffer_size);
                 let (reader, writer) = provider.into_reader_writer(content_length)?;
                 Ok((Self::Reader::Bounded(reader), Self::Writer::Bounded(writer)))
             }
-            Dynamic(_) | Static(_) => {
+            _ => {
                 if u64::try_from(self.buffer_size.get())
                     .is_ok_and(|buffer| content_length <= buffer)
                 {
