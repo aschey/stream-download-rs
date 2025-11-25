@@ -11,13 +11,15 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Notify, mpsc};
 use tracing::{debug, error};
 
+use crate::storage::ContentLength;
+
 #[derive(Debug, Clone)]
 pub(crate) struct SourceHandle {
     pub(super) downloaded: Downloaded,
     pub(super) download_status: DownloadStatus,
     pub(super) requested_position: RequestedPosition,
     pub(super) position_reached: PositionReached,
-    pub(super) content_length: Option<u64>,
+    pub(super) content_length: ContentLength,
     pub(super) seek_tx: mpsc::Sender<u64>,
     pub(super) notify_read: NotifyRead,
 }
@@ -51,7 +53,7 @@ impl SourceHandle {
         self.notify_read.notify_read();
     }
 
-    pub(crate) fn content_length(&self) -> Option<u64> {
+    pub(crate) fn content_length(&self) -> ContentLength {
         self.content_length
     }
 

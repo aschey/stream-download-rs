@@ -19,7 +19,7 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace, warn};
 
-use crate::storage::StorageWriter;
+use crate::storage::{ContentLength, StorageWriter};
 use crate::{ProgressFn, ReconnectFn, Settings, StreamPhase, StreamState};
 
 pub(crate) mod handle;
@@ -61,7 +61,7 @@ pub trait SourceStream:
 
     /// Returns the size of the remote resource in bytes. The result should be `None`
     /// if the stream is infinite or doesn't have a known length.
-    fn content_length(&self) -> Option<u64>;
+    fn content_length(&self) -> ContentLength;
 
     /// Seeks to a specific position in the stream. This method is only called if the
     /// requested range has not been downloaded, so this method should jump to the
@@ -119,7 +119,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     requested_position: RequestedPosition,
     position_reached: PositionReached,
     notify_read: NotifyRead,
-    content_length: Option<u64>,
+    content_length: ContentLength,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     prefetch_bytes: u64,
@@ -140,7 +140,7 @@ where
 {
     pub(crate) fn new(
         writer: W,
-        content_length: Option<u64>,
+        content_length: ContentLength,
         settings: Settings<S>,
         cancellation_token: CancellationToken,
     ) -> Self {
@@ -234,6 +234,7 @@ where
     }
 
     async fn handle_seek(&mut self, stream: &mut S, position: u64) -> io::Result<()> {
+        use ContentLength::*;
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
             let current_stream_position = self.writer.stream_position()?;
@@ -247,23 +248,27 @@ where
                     .add(self.prefetch_start_position..current_stream_position);
                 self.prefetch_complete = true;
             }
-            if let Some(content_length) = self.content_length {
-                // Get the minimum possible start position to ensure we capture the entire range
-                let min_start_position = current_stream_position.min(position);
-                debug!(
-                    start = min_start_position,
-                    end = content_length,
-                    "checking for seek range",
-                );
-                if let Some(gap) = self.downloaded.next_gap(min_start_position..content_length) {
-                    // Gap start may be too low if we're seeking forward, so check it against the
-                    // position
-                    let seek_start = gap.start.max(position);
-                    debug!(seek_start, seek_end = gap.end, "requesting seek range");
-                    self.seek(stream, seek_start, Some(gap.end)).await?;
+            match self.content_length {
+                Static(content_length) => {
+                    // Get the minimum possible start position to ensure we capture the entire range
+                    let min_start_position = current_stream_position.min(position);
+                    debug!(
+                        start = min_start_position,
+                        end = content_length,
+                        "checking for seek range",
+                    );
+                    if let Some(gap) = self.downloaded.next_gap(min_start_position..content_length)
+                    {
+                        // Gap start may be too low if we're seeking forward, so check it against
+                        // the position
+                        let seek_start = gap.start.max(position);
+                        debug!(seek_start, seek_end = gap.end, "requesting seek range");
+                        self.seek(stream, seek_start, Some(gap.end)).await?;
+                    }
                 }
-            } else {
-                self.seek(stream, position, None).await?;
+                Dynamic | Unknown => {
+                    self.seek(stream, position, None).await?;
+                }
             }
         }
         Ok(())
@@ -330,7 +335,7 @@ where
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
         if stream.supports_seek()
-            && let Some(content_length) = self.content_length
+            && let ContentLength::Static(content_length) = self.content_length
         {
             let gap = self.downloaded.next_gap(0..content_length);
             if let Some(gap) = gap {

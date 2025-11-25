@@ -28,7 +28,7 @@ use educe::Educe;
 use parking_lot::Mutex;
 use tracing::{debug, instrument, trace, warn};
 
-use super::{StorageProvider, StorageReader, StorageWriter};
+use super::{ContentLength, StorageProvider, StorageReader, StorageWriter};
 use crate::WrapIoResult;
 
 /// Creates a [`BoundedStorageReader`] with a fixed size.
@@ -71,16 +71,18 @@ where
 
     fn into_reader_writer(
         self,
-        content_length: Option<u64>,
+        content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
         // We need to take the smaller of the two sizes here to prevent excess memory allocation
-        let buffer_size = if let Some(content_length) = content_length {
+        let buffer_size = if let ContentLength::Static(content_length) = content_length {
             content_length.min(self.buffer_size as u64)
         } else {
             self.buffer_size as u64
         };
 
-        let (reader, writer) = self.inner.into_reader_writer(Some(buffer_size))?;
+        let (reader, writer) = self
+            .inner
+            .into_reader_writer(ContentLength::Static(buffer_size))?;
 
         let buffer_size: usize = buffer_size
             .try_into()

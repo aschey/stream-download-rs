@@ -11,7 +11,7 @@ use educe::Educe;
 pub use settings::*;
 use source::handle::SourceHandle;
 use source::{DecodeError, Source, SourceStream};
-use storage::StorageProvider;
+use storage::{ContentLength, StorageProvider};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -66,7 +66,7 @@ pub struct StreamDownload<P: StorageProvider> {
     handle: SourceHandle,
     download_task_cancellation_token: CancellationToken,
     cancel_on_drop: bool,
-    content_length: Option<u64>,
+    content_length: ContentLength,
     storage_capacity: Option<usize>,
 }
 
@@ -378,7 +378,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     /// Returns the content length of the stream, if available.
-    pub fn content_length(&self) -> Option<u64> {
+    pub fn content_length(&self) -> ContentLength {
         self.content_length
     }
 
@@ -436,7 +436,7 @@ impl<P: StorageProvider> StreamDownload<P> {
             }
             SeekFrom::End(position) => {
                 debug!(seek_position = position, "seeking from end");
-                if let Some(length) = self.handle.content_length() {
+                if let ContentLength::Static(length) = self.handle.content_length() {
                     (length as i64 + position) as u64
                 } else {
                     return Err(io::Error::new(
@@ -457,7 +457,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     fn normalize_requested_position(&self, requested_position: u64) -> u64 {
-        if let Some(content_length) = self.content_length {
+        if let ContentLength::Static(content_length) = self.content_length {
             // ensure we don't request a position beyond the end of the stream
             requested_position.min(content_length)
         } else {

@@ -149,6 +149,7 @@ use stream_download::http::HttpStream;
 use stream_download::http::reqwest::Client;
 use stream_download::source::DecodeError;
 use stream_download::source::SourceStream;
+use stream_download::storage::ContentLength;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 
@@ -157,7 +158,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let stream =
         HttpStream::<Client>::create("https://some-cool-url.com/some-stream".parse()?).await?;
     let content_length = stream.content_length();
-    let is_infinite = content_length.is_none();
+    let is_infinite = match content_length {
+        ContentLength::Static(_) => false,
+        _ => true,
+    };
     println!("Infinite stream = {is_infinite}");
 
     let mut reader = match StreamDownload::from_stream(

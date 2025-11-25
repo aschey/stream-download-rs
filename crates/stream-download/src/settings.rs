@@ -101,7 +101,7 @@ impl<S> Settings<S> {
 
     /// If there is no new data for a duration greater than this timeout, we will attempt to
     /// reconnect to the server.
-    ///  
+    ///
     /// This timeout is designed to help streams recover during temporary network failures,
     /// but you may need to increase this if you're seeing warnings about timeouts in the logs
     /// under normal network conditions.
@@ -138,10 +138,17 @@ impl<S> Settings<S> {
     /// use stream_download::Settings;
     /// use stream_download::http::HttpStream;
     /// use stream_download::source::SourceStream;
+    /// use stream_download::storage::ContentLength;
     ///
     /// let settings = Settings::default();
     /// settings.on_progress(|stream: &HttpStream<Client>, state, _| {
-    ///     let progress = state.current_position as f32 / stream.content_length().unwrap() as f32;
+    ///     let content_length = match stream.content_length() {
+    ///         ContentLength::Static(length) => length,
+    ///         ContentLength::Dynamic | ContentLength::Unknown => {
+    ///             panic!("Unknown content length")
+    ///         }
+    ///     };
+    ///     let progress = state.current_position as f32 / content_length as f32;
     ///     println!("progress: {}%", progress * 100.0);
     /// });
     /// ```

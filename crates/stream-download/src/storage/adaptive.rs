@@ -31,7 +31,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 
 use super::bounded::{BoundedStorageProvider, BoundedStorageReader, BoundedStorageWriter};
-use super::{StorageProvider, StorageReader, StorageWriter};
+use super::{ContentLength, StorageProvider, StorageReader, StorageWriter};
 
 /// Provides adaptive storage selection based on stream characteristics.
 ///
@@ -106,24 +106,25 @@ where
 
     fn into_reader_writer(
         self,
-        content_length: Option<u64>,
+        content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
+        use ContentLength::*;
         match content_length {
-            None => {
+            Dynamic | Unknown => {
                 // For infinite streams, use bounded storage
                 let provider = BoundedStorageProvider::new(self.fixed_storage, self.buffer_size);
-                let (reader, writer) = provider.into_reader_writer(None)?;
+                let (reader, writer) = provider.into_reader_writer(content_length)?;
                 Ok((Self::Reader::Bounded(reader), Self::Writer::Bounded(writer)))
             }
-            Some(length) => {
+            Static(length) => {
                 if u64::try_from(self.buffer_size.get()).is_ok_and(|buffer| length <= buffer) {
                     // Small enough for fixed-length storage
-                    let (reader, writer) = self.fixed_storage.into_reader_writer(Some(length))?;
+                    let (reader, writer) = self.fixed_storage.into_reader_writer(Static(length))?;
                     Ok((Self::Reader::Fixed(reader), Self::Writer::Fixed(writer)))
                 } else {
                     // Too large, use variable-length storage
                     let (reader, writer) =
-                        self.variable_storage.into_reader_writer(Some(length))?;
+                        self.variable_storage.into_reader_writer(Static(length))?;
                     Ok((
                         Self::Reader::Variable(reader),
                         Self::Writer::Variable(writer),
