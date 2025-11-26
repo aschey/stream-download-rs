@@ -24,8 +24,11 @@ impl StorageProvider for MemoryStorageProvider {
         self,
         content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
-        let content_length: Option<u64> = content_length.into();
-        let initial_buffer_size = content_length.unwrap_or(0);
+        let initial_buffer_size = match content_length {
+            ContentLength::Static(content_length) => content_length,
+            ContentLength::Dynamic(dynamic_length) => dynamic_length.reported,
+            ContentLength::Unknown => 0,
+        };
         let initial_buffer_size: usize = initial_buffer_size
             .try_into()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))

@@ -237,7 +237,11 @@ where
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
             let current_stream_position = self.writer.stream_position()?;
-            let content_length = self.content_length;
+            let content_length = match self.content_length {
+                ContentLength::Static(content_length) => Some(content_length),
+                ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
+                ContentLength::Unknown => None,
+            };
             if self.prefetch_complete {
                 debug!("re-starting prefetch");
                 self.prefetch_start_position = position;
@@ -248,7 +252,6 @@ where
                     .add(self.prefetch_start_position..current_stream_position);
                 self.prefetch_complete = true;
             }
-            let content_length: Option<u64> = content_length.into();
             if let Some(content_length) = content_length {
                 // Get the minimum possible start position to ensure we capture the entire range
                 let min_start_position = current_stream_position.min(position);
@@ -335,7 +338,11 @@ where
     }
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
-        let content_length: Option<u64> = self.content_length.into();
+        let content_length = match self.content_length {
+            ContentLength::Static(content_length) => Some(content_length),
+            ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
+            ContentLength::Unknown => None,
+        };
         if stream.supports_seek()
             && let Some(content_length) = content_length
         {

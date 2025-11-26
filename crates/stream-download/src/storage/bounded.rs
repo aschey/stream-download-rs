@@ -74,11 +74,12 @@ where
         content_length: ContentLength,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
         // We need to take the smaller of the two sizes here to prevent excess memory allocation
-        let content_length: Option<u64> = content_length.into();
-        let buffer_size = if let Some(content_length) = content_length {
-            content_length.min(self.buffer_size as u64)
-        } else {
-            self.buffer_size as u64
+        let buffer_size = match content_length {
+            ContentLength::Static(content_length) => content_length.min(self.buffer_size as u64),
+            ContentLength::Dynamic(dynamic_length) => {
+                dynamic_length.reported.min(self.buffer_size as u64)
+            }
+            ContentLength::Unknown => self.buffer_size as u64,
         };
 
         let (reader, writer) = self.inner.into_reader_writer(buffer_size.into())?;
