@@ -436,7 +436,11 @@ impl<P: StorageProvider> StreamDownload<P> {
             }
             SeekFrom::End(position) => {
                 debug!(seek_position = position, "seeking from end");
-                let content_length: Option<u64> = self.handle.content_length().into();
+                let content_length = match self.handle.content_length() {
+                    ContentLength::Static(content_length) => Some(content_length),
+                    ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
+                    ContentLength::Unknown => None,
+                };
                 if let Some(length) = content_length {
                     (length as i64 + position) as u64
                 } else {
@@ -458,7 +462,11 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     fn normalize_requested_position(&self, requested_position: u64) -> u64 {
-        let content_length: Option<u64> = self.content_length.into();
+        let content_length = match self.content_length {
+            ContentLength::Static(content_length) => Some(content_length),
+            ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
+            ContentLength::Unknown => None,
+        };
         if let Some(content_length) = content_length {
             // ensure we don't request a position beyond the end of the stream
             requested_position.min(content_length)
