@@ -237,11 +237,7 @@ where
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
             let current_stream_position = self.writer.stream_position()?;
-            let content_length = match self.content_length {
-                ContentLength::Static(content_length) => Some(content_length),
-                ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
-                ContentLength::Unknown => None,
-            };
+            let content_length = self.content_length.current_value();
             if self.prefetch_complete {
                 debug!("re-starting prefetch");
                 self.prefetch_start_position = position;
@@ -338,11 +334,7 @@ where
     }
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
-        let content_length = match self.content_length {
-            ContentLength::Static(content_length) => Some(content_length),
-            ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
-            ContentLength::Unknown => None,
-        };
+        let content_length = self.content_length.current_value();
         if stream.supports_seek()
             && let Some(content_length) = content_length
         {

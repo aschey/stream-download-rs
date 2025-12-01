@@ -213,11 +213,11 @@ impl<C: Client> HttpStream<C> {
         let content_length = response.content_length().map_or_else(
             || {
                 warn!("content length header missing");
-                ContentLength::Unknown
+                ContentLength::new_unknown()
             },
             |content_length| {
                 debug!(content_length, "received content length");
-                ContentLength::Static(content_length)
+                ContentLength::new_static(content_length)
             },
         );
 
@@ -299,11 +299,7 @@ impl<C: Client> SourceStream for HttpStream<C> {
 
     #[instrument(skip(self))]
     async fn seek_range(&mut self, start: u64, end: Option<u64>) -> io::Result<()> {
-        let content_length = match self.content_length {
-            ContentLength::Static(content_length) => Some(content_length),
-            ContentLength::Dynamic(dynamic_length) => Some(dynamic_length.reported),
-            ContentLength::Unknown => None,
-        };
+        let content_length = self.content_length.current_value();
         if Some(start) == content_length {
             debug!(
                 "attempting to seek where start is the length of the stream, returning empty \

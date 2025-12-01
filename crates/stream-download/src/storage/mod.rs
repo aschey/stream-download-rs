@@ -70,25 +70,58 @@ pub enum ContentLength {
     Unknown,
 }
 
+impl ContentLength {
+    /// Creates a new static content length.
+    ///
+    /// This is typically used for media content that has a fixed size.
+    pub fn new_static(value: u64) -> Self {
+        Self::Static(value)
+    }
+
+    /// Creates a new dynamic content length.
+    ///
+    /// This is typically used for media content that has an unknown size.
+    pub fn new_dynamic(value: DynamicLength) -> Self {
+        Self::Dynamic(value)
+    }
+
+    /// Creates a new unknown content length.
+    ///
+    /// This is typically used for media content that has an unknown size.
+    pub fn new_unknown() -> Self {
+        Self::Unknown
+    }
+
+    /// Returns the current value of the content length.
+    ///
+    /// For static lengths, this is the exact length.
+    /// For dynamic lengths, this is the current length if known or the value
+    /// returned by the server before starting the data download.
+    /// For unknown lengths, this is always `None`.
+    pub fn current_value(&self) -> Option<u64> {
+        match self {
+            Self::Static(len) => Some(*len),
+            Self::Dynamic(len) => Some(len.gathered.unwrap_or(len.reported)),
+            Self::Unknown => None,
+        }
+    }
+}
+
 impl From<u64> for ContentLength {
     fn from(value: u64) -> Self {
-        Self::Static(value)
+        Self::new_static(value)
     }
 }
 
 impl From<DynamicLength> for ContentLength {
     fn from(value: DynamicLength) -> Self {
-        Self::Dynamic(value)
+        Self::new_dynamic(value)
     }
 }
 
 impl From<ContentLength> for Option<u64> {
     fn from(val: ContentLength) -> Self {
-        match val {
-            ContentLength::Static(len) => Some(len),
-            ContentLength::Dynamic(len) => Some(len.gathered.unwrap_or_default()),
-            ContentLength::Unknown => None,
-        }
+        val.current_value()
     }
 }
 
@@ -96,7 +129,7 @@ impl PartialEq<u64> for ContentLength {
     fn eq(&self, other: &u64) -> bool {
         match self {
             Self::Static(len) => len == other,
-            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported).max(len.reported) == *other,
+            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported) == *other,
             Self::Unknown => false,
         }
     }
@@ -106,11 +139,7 @@ impl PartialOrd<u64> for ContentLength {
     fn partial_cmp(&self, other: &u64) -> Option<std::cmp::Ordering> {
         match self {
             Self::Static(len) => len.partial_cmp(other),
-            Self::Dynamic(len) => len
-                .gathered
-                .unwrap_or(len.reported)
-                .max(len.reported)
-                .partial_cmp(other),
+            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported).partial_cmp(other),
             Self::Unknown => None,
         }
     }
