@@ -33,6 +33,7 @@ pub use yt_dlp::*;
 use crate::WrapIoResult;
 use crate::async_read::AsyncReadStream;
 use crate::source::{SourceStream, StreamOutcome};
+use crate::storage::ContentLength;
 
 mod command_builder;
 mod ffmpeg;
@@ -174,7 +175,7 @@ fn stdio_to_tmp_file() -> io::Result<(Stdio, NamedTempFile)> {
 /// Parameters for creating a [`ProcessStream`].
 #[derive(Debug)]
 pub struct ProcessStreamParams {
-    content_length: Option<u64>,
+    content_length: ContentLength,
     command: SpawnedCommand,
 }
 
@@ -186,7 +187,7 @@ impl ProcessStreamParams {
     {
         Ok(Self {
             command: command.spawn()?,
-            content_length: None,
+            content_length: ContentLength::Unknown,
         })
     }
 
@@ -194,7 +195,7 @@ impl ProcessStreamParams {
     #[must_use]
     pub fn content_length<L>(self, content_length: L) -> Self
     where
-        L: Into<Option<u64>>,
+        L: Into<ContentLength>,
     {
         Self {
             content_length: content_length.into(),
@@ -262,7 +263,7 @@ impl SourceStream for ProcessStream {
         })
     }
 
-    fn content_length(&self) -> Option<u64> {
+    fn content_length(&self) -> ContentLength {
         self.stream.content_length()
     }
 
