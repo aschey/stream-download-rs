@@ -41,7 +41,8 @@ name = "libmpv2-sys"
 version = 2
 yanked = "deny"
 # RUSTSEC-2024-0384 is an unmaintained wasm-only dependency and we currently don't support wasm
-ignore = ["RUSTSEC-2024-0384"]
+# RUSTSEC-2025-0134 is for rustls-pemfile being unmaintained. Remove when dependencies are updated.
+ignore = ["RUSTSEC-2024-0384", "RUSTSEC-2025-0134"]
 
 [bans]
 multiple-versions = "allow"

@@ -25,9 +25,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "v3"
+      # Removing for now due to disk space issues
+      # - uses: Swatinem/rust-cache@v2
+      #   with:
+      #     prefix-key: "v3"
       - name: Install dependencies
         run: |
           sudo apt-get update
