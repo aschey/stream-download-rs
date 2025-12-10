@@ -31,7 +31,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroUsize;
 
 use super::bounded::{BoundedStorageProvider, BoundedStorageReader, BoundedStorageWriter};
-use super::{ContentLength, StorageProvider, StorageReader, StorageWriter};
+use super::{StorageProvider, StorageReader, StorageWriter};
 
 /// Provides adaptive storage selection based on stream characteristics.
 ///
@@ -106,19 +106,17 @@ where
 
     fn into_reader_writer(
         self,
-        content_length: ContentLength,
+        content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
         match content_length {
-            ContentLength::Unknown => {
+            None => {
                 // For infinite streams, use bounded storage
                 let provider = BoundedStorageProvider::new(self.fixed_storage, self.buffer_size);
-                let (reader, writer) = provider.into_reader_writer(content_length)?;
+                let (reader, writer) = provider.into_reader_writer(None)?;
                 Ok((Self::Reader::Bounded(reader), Self::Writer::Bounded(writer)))
             }
-            _ => {
-                if u64::try_from(self.buffer_size.get())
-                    .is_ok_and(|buffer| content_length <= buffer)
-                {
+            Some(length) => {
+                if u64::try_from(self.buffer_size.get()).is_ok_and(|buffer| length <= buffer) {
                     // Small enough for fixed-length storage
                     let (reader, writer) = self.fixed_storage.into_reader_writer(content_length)?;
                     Ok((Self::Reader::Fixed(reader), Self::Writer::Fixed(writer)))

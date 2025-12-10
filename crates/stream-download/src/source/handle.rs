@@ -11,7 +11,7 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Notify, mpsc};
 use tracing::{debug, error};
 
-use crate::storage::ContentLength;
+use crate::source::ContentLength;
 
 #[derive(Debug, Clone)]
 pub(crate) struct SourceHandle {
