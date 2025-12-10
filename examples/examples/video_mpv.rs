@@ -107,8 +107,6 @@ fn read(stream: &mut Stream, buf: &mut [i8]) -> i64 {
     stream.reader.read(buf).unwrap() as i64
 }
 
-#[expect(clippy::boxed_local)]
-#[allow(unfulfilled_lint_expectations)]
 fn close(stream: Box<Stream>) {
     stream.reader.cancel_download();
 }

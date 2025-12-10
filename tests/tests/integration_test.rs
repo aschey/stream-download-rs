@@ -12,12 +12,12 @@ use setup::{
 use stream_download::async_read::AsyncReadStreamParams;
 use stream_download::http::{HttpStream, HttpStreamError};
 use stream_download::process::{self, ProcessStreamParams};
-use stream_download::source::SourceStream;
+use stream_download::source::{ContentLength, SourceStream};
+use stream_download::storage::StorageProvider;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
-use stream_download::storage::{ContentLength, StorageProvider};
 use stream_download::{Settings, StreamDownload, StreamInitializationError, StreamState, http};
 use stream_download_opendal::{OpendalStream, OpendalStreamParams, StreamDownloadExt};
 use tokio::sync::{mpsc, oneshot};

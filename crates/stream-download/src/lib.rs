@@ -10,8 +10,8 @@ use std::io::{self, Read, Seek, SeekFrom};
 use educe::Educe;
 pub use settings::*;
 use source::handle::SourceHandle;
-use source::{DecodeError, Source, SourceStream};
-use storage::{ContentLength, StorageProvider};
+use source::{ContentLength, DecodeError, Source, SourceStream};
+use storage::StorageProvider;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument, trace};
 
@@ -378,8 +378,8 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     /// Returns the content length of the stream, if available.
-    pub fn content_length(&self) -> ContentLength {
-        self.content_length
+    pub fn content_length(&self) -> Option<u64> {
+        self.content_length.current_value()
     }
 
     async fn from_create_stream<S, F, Fut>(
@@ -398,7 +398,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         let content_length = stream.content_length();
         let storage_capacity = storage_provider.max_capacity();
         let (reader, writer) = storage_provider
-            .into_reader_writer(content_length)
+            .into_reader_writer(content_length.current_value())
             .map_err(StreamInitializationError::StorageCreationFailure)?;
         let cancellation_token = CancellationToken::new();
         let cancel_on_drop = settings.cancel_on_drop;

@@ -11,8 +11,8 @@ use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use stream_download::http;
 use stream_download::source::DecodeError;
+use stream_download::storage::StorageProvider;
 use stream_download::storage::memory::{MemoryStorage, MemoryStorageProvider};
-use stream_download::storage::{ContentLength, StorageProvider};
 use tokio::runtime::Runtime;
 use tokio::sync::{mpsc, oneshot};
 use tower_http::services::ServeDir;
@@ -269,7 +269,7 @@ impl StorageProvider for ErrorTestStorageProvider {
 
     fn into_reader_writer(
         self,
-        content_length: ContentLength,
+        content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
         let (reader, writer) = self.0.into_reader_writer(content_length)?;
         Ok((reader, ErrorTestStorage(writer)))

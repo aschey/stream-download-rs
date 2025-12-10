@@ -44,8 +44,7 @@ pub use reqwest;
 use tracing::{debug, instrument, warn};
 
 use crate::WrapIoResult;
-use crate::source::{DecodeError, SourceStream};
-use crate::storage::ContentLength;
+use crate::source::{ContentLength, DecodeError, SourceStream};
 
 #[cfg(feature = "reqwest")]
 pub mod reqwest_client;

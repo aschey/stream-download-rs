@@ -9,8 +9,7 @@ use futures_util::Stream;
 use tokio::io::AsyncRead;
 use tokio_util::io::ReaderStream;
 
-use crate::source::SourceStream;
-use crate::storage::ContentLength;
+use crate::source::{ContentLength, SourceStream};
 
 /// Parameters for creating an [`AsyncReadStream`].
 #[derive(Debug)]
