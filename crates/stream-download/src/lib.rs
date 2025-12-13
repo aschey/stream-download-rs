@@ -13,7 +13,7 @@ use source::handle::SourceHandle;
 use source::{DecodeError, Source, SourceStream};
 use storage::StorageProvider;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, instrument, trace};
 
 #[cfg(feature = "async-read")]
 pub mod async_read;
