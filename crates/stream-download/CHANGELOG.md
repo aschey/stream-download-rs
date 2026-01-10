@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.23.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.9..stream-download-v0.23.0) - 2026-01-10
+
+### Dependencies
+
+- *(deps)* [**breaking**] Update to reqwest 0.13 ([#252](https://github.com/aschey/stream-download-rs/issues/252)) - ([7743a85](https://github.com/aschey/stream-download-rs/commit/7743a853f9c5c9219cbcd88d8c6f5221acf82566))
+
+### Miscellaneous Tasks
+
+- Bump rust-toolchain from 1.91.1 to 1.92.0 ([#250](https://github.com/aschey/stream-download-rs/issues/250)) - ([8f25822](https://github.com/aschey/stream-download-rs/commit/8f258223d42ab04a8bcb6210771de2ac3b06c66b))
+
+
 ## [0.22.9](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.8..stream-download-v0.22.9) - 2025-11-22
 
 ### Miscellaneous Tasks
