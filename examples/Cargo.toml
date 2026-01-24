@@ -19,7 +19,12 @@ rodio = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = [
+  "sync",
+  "macros",
+  "rt-multi-thread",
+  "io-std",
+] }
 tower = { workspace = true, features = ["make"] }
 reqwest-retry = { workspace = true }
 youtube_dl = { workspace = true, features = ["tokio"] }
