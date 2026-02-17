@@ -6,7 +6,6 @@ license.workspace = true
 
 [dependencies]
 stream-download = { path = "../crates/stream-download", features = [
-  "reqwest-rustls",
   "reqwest-middleware",
   "process",
   "async-read",
