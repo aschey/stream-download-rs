@@ -39,10 +39,10 @@ cargo add stream-download
   trait (enabled by default).
 - `reqwest` - enables streaming content over http using
   [reqwest](https://crates.io/crates/reqwest) (enabled by default).
+- `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the
+  `reqwest` feature (enabled by default).
 - `reqwest-native-tls` - enables reqwest's `native-tls` feature. Also enables
   the `reqwest` feature.
-- `reqwest-rustls` - enables reqwest's `rustls` feature. Also enables the
-  `reqwest` feature.
 - `reqwest-middleware` - enables integration with
   [`reqwest-middleware`](https://crates.io/crates/reqwest-middleware). Can be
   used to add retry policies and additional observability. Also enables the
@@ -56,12 +56,9 @@ cargo add stream-download
 - `registry` - adds a method for routing inputs to different stream handlers
   based on a set of rules.
 
-**NOTE**: One of `reqwest-native-tls` or `reqwest-rustls` is required if you
-wish to use HTTPS streams.
-
-`reqwest` exposes additional TLS-related feature flags beyond the two that we
-re-export. If you want greater control over the TLS configuration, add a direct
-dependency on `reqwest` and enable the
+**NOTE**: The default features in this create also enable `reqwest`'s default features. If
+you need to disable some of these, disable the default features from this crate
+and enable the
 [features](https://docs.rs/reqwest/latest/reqwest/#optional-features) you need.
 
 ## Usage

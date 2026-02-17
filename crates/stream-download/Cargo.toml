@@ -34,7 +34,14 @@ tracing = { workspace = true }
 url = { workspace = true, optional = true }
 
 [features]
-default = ["reqwest", "temp-storage"]
+default = [
+  "reqwest",
+  "temp-storage",
+  "reqwest/default-tls",
+  "reqwest/charset",
+  "reqwest/http2",
+  "reqwest/system-proxy",
+]
 http = ["dep:mediatype"]
 reqwest = ["http", "dep:reqwest"]
 reqwest-native-tls = ["reqwest", "reqwest/native-tls"]
