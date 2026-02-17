@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.23.0..stream-download-v0.24.0) - 2026-02-17
+
+### Features
+
+- [**breaking**] Enable reqwest's default features ([#256](https://github.com/aschey/stream-download-rs/issues/256)) - ([e0d4926](https://github.com/aschey/stream-download-rs/commit/e0d49265a2e6a60c12441cc5a9936211e3819bcc))
+
+
 ## [0.23.0](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.22.9..stream-download-v0.23.0) - 2026-01-10
 
 ### Dependencies
