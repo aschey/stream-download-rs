@@ -74,13 +74,10 @@ where
         content_length: Option<u64>,
     ) -> io::Result<(Self::Reader, Self::Writer)> {
         // We need to take the smaller of the two sizes here to prevent excess memory allocation
-        let buffer_size = if let Some(content_length) = content_length {
-            content_length.min(self.buffer_size as u64)
-        } else {
-            self.buffer_size as u64
-        };
+        let buffer_size =
+            content_length.map_or(self.buffer_size as u64, |v| v.min(self.buffer_size as u64));
 
-        let (reader, writer) = self.inner.into_reader_writer(Some(buffer_size))?;
+        let (reader, writer) = self.inner.into_reader_writer(buffer_size.into())?;
 
         let buffer_size: usize = buffer_size
             .try_into()
