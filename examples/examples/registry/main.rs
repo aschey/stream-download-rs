@@ -5,6 +5,7 @@ use std::io;
 
 use file::FileResolver;
 use http::HttpResolver;
+use rodio::{Decoder, DeviceSinkBuilder, Player};
 use stream_download::StreamDownload;
 use stream_download::registry::Registry;
 use stream_download::storage::adaptive::AdaptiveStorageProvider;
@@ -49,10 +50,10 @@ async fn main() -> Result<()> {
     };
 
     let handle = tokio::task::spawn_blocking(move || {
-        let stream_handle = rodio::OutputStreamBuilder::open_default_stream()?;
-        let sink = rodio::Sink::connect_new(stream_handle.mixer());
-        sink.append(rodio::Decoder::new(reader)?);
-        sink.sleep_until_end();
+        let sink = DeviceSinkBuilder::open_default_sink()?;
+        let player = Player::connect_new(sink.mixer());
+        player.append(Decoder::new(reader)?);
+        player.sleep_until_end();
 
         Ok::<_, Box<dyn Error + Send + Sync>>(())
     });
