@@ -3,6 +3,7 @@ use std::error::Error;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
+use rodio::{Decoder, DeviceSinkBuilder, Player};
 use stream_download::process::{
     CommandBuilder, FfmpegConvertAudioCommand, ProcessStreamParams, YtDlpCommand,
 };
@@ -105,11 +106,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let reader_handle = reader.handle();
 
     let handle = tokio::task::spawn_blocking(move || {
-        let stream_handle = rodio::OutputStreamBuilder::open_default_stream()?;
-        let sink = rodio::Sink::connect_new(stream_handle.mixer());
-        sink.append(rodio::Decoder::new(reader)?);
-        sink.sleep_until_end();
-
+        let sink = DeviceSinkBuilder::open_default_sink()?;
+        let player = Player::connect_new(sink.mixer());
+        player.append(Decoder::new(reader)?);
+        player.sleep_until_end();
         Ok::<_, Box<dyn Error + Send + Sync>>(())
     });
     handle.await??;
