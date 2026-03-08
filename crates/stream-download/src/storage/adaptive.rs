@@ -118,12 +118,12 @@ where
             Some(length) => {
                 if u64::try_from(self.buffer_size.get()).is_ok_and(|buffer| length <= buffer) {
                     // Small enough for fixed-length storage
-                    let (reader, writer) = self.fixed_storage.into_reader_writer(Some(length))?;
+                    let (reader, writer) = self.fixed_storage.into_reader_writer(content_length)?;
                     Ok((Self::Reader::Fixed(reader), Self::Writer::Fixed(writer)))
                 } else {
                     // Too large, use variable-length storage
                     let (reader, writer) =
-                        self.variable_storage.into_reader_writer(Some(length))?;
+                        self.variable_storage.into_reader_writer(content_length)?;
                     Ok((
                         Self::Reader::Variable(reader),
                         Self::Writer::Variable(writer),
