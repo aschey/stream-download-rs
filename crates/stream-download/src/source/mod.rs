@@ -24,6 +24,151 @@ use crate::{ProgressFn, ReconnectFn, Settings, StreamPhase, StreamState};
 
 pub(crate) mod handle;
 
+/// Represents a content length that can change during processing.
+///
+/// This structure holds:
+/// - `reported`: The length of the content as reported by the server (e.g., Content-Range header).
+/// - `gathered`: The actual length of the content after processing (e.g., decryption,
+///   decompression), or `None` if the final value is not yet known (still being calculated or
+///   accumulated).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DynamicLength {
+    /// The length of the content as reported by the server, for example, via Content-Range header.
+    reported: u64,
+    /// The actual content length gathered after all processing.
+    /// This remains `None` until the entire content is processed and its final length determined.
+    gathered: Option<u64>,
+}
+
+/// Describes the possible states for the length of a stream or content resource.
+///
+/// `ContentLength` distinguishes between content with a fixed, knowable size,
+/// content whose final size is determined only after processing,
+/// and content where the length is unknown.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ContentLength {
+    /// Static content length that remains constant throughout processing.
+    ///
+    /// Contains the exact number of bytes in the content as reported by the server or known
+    /// beforehand. This value does not change during decryption, decompression, or any form of
+    /// data transformation.
+    ///
+    /// Examples:
+    /// - Regular file downloads
+    /// - Static media files with a fixed size
+    /// - HTTP responses with a `Content-Length` header
+    Static(u64),
+
+    /// Dynamic content length that may change during reading or processing.
+    ///
+    /// The [`DynamicLength`] structure stores both the initially reported length from the server,
+    /// and the accumulated "gathered" length as chunks are processed.
+    /// `gathered` may temporarily be `None` until the content is fully processed
+    /// (for example, for decrypted, transformed, or recomposed streams).
+    ///
+    /// Examples:
+    /// - Encrypted streams/files (where decrypted size may differ)
+    /// - Compressed streams/files (expanding during decompression)
+    /// - Media content assembled from segments
+    Dynamic(DynamicLength),
+
+    /// Unknown content length.
+    ///
+    /// Used when the server does not provide content length information
+    /// and it cannot be determined up front.
+    /// This is typical for live streaming, HTTP chunked transfer, or similar scenarios.
+    ///
+    /// Examples:
+    /// - Live streams without a defined end
+    /// - HTTP chunked responses
+    /// - Server responses lacking any length information
+    Unknown,
+}
+
+impl DynamicLength {
+    /// Creates a new dynamic content length.
+    ///
+    /// This is typically used for encrypted media content.
+    fn new(reported: u64, gathered: Option<u64>) -> Self {
+        Self { reported, gathered }
+    }
+}
+
+impl ContentLength {
+    /// Creates a new static content length.
+    ///
+    /// This is typically used for media content that has a fixed size.
+    pub fn new_static(value: u64) -> Self {
+        Self::Static(value)
+    }
+
+    /// Creates a new dynamic content length.
+    ///
+    /// This is typically used for media content that has an unknown size.
+    pub fn new_dynamic(reported: u64, gathered: Option<u64>) -> Self {
+        Self::Dynamic(DynamicLength::new(reported, gathered))
+    }
+
+    /// Creates a new unknown content length.
+    ///
+    /// This is typically used for media content that has an unknown size.
+    pub fn new_unknown() -> Self {
+        Self::Unknown
+    }
+
+    /// Returns the current value of the content length.
+    ///
+    /// For static lengths, this is the exact length.
+    /// For dynamic lengths, this is the current length if known or the value
+    /// returned by the server before starting the data download.
+    /// For unknown lengths, this is always `None`.
+    pub fn current_value(&self) -> Option<u64> {
+        match self {
+            Self::Static(len) => Some(*len),
+            Self::Dynamic(len) => Some(len.gathered.unwrap_or(len.reported)),
+            Self::Unknown => None,
+        }
+    }
+}
+
+impl From<u64> for ContentLength {
+    fn from(value: u64) -> Self {
+        Self::new_static(value)
+    }
+}
+
+impl From<DynamicLength> for ContentLength {
+    fn from(value: DynamicLength) -> Self {
+        Self::Dynamic(value)
+    }
+}
+
+impl From<ContentLength> for Option<u64> {
+    fn from(val: ContentLength) -> Self {
+        val.current_value()
+    }
+}
+
+impl PartialEq<u64> for ContentLength {
+    fn eq(&self, other: &u64) -> bool {
+        match self {
+            Self::Static(len) => len == other,
+            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported) == *other,
+            Self::Unknown => false,
+        }
+    }
+}
+
+impl PartialOrd<u64> for ContentLength {
+    fn partial_cmp(&self, other: &u64) -> Option<std::cmp::Ordering> {
+        match self {
+            Self::Static(len) => len.partial_cmp(other),
+            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported).partial_cmp(other),
+            Self::Unknown => None,
+        }
+    }
+}
+
 /// Enum representing the final outcome of the stream.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum StreamOutcome {
@@ -59,9 +204,17 @@ pub trait SourceStream:
         params: Self::Params,
     ) -> impl Future<Output = Result<Self, Self::StreamCreationError>> + Send;
 
-    /// Returns the size of the remote resource in bytes. The result should be `None`
-    /// if the stream is infinite or doesn't have a known length.
-    fn content_length(&self) -> Option<u64>;
+    /// Returns information about the content length of the remote resource.
+    ///
+    /// Use [`ContentLength::Static`] for a known fixed size,
+    /// [`ContentLength::Dynamic`] when the final size may differ or is finalized after processing,
+    /// or [`ContentLength::Unknown`] if the stream is infinite or does not have a known length.
+    ///
+    /// Note: [`ContentLength::Dynamic`] is appropriate for encrypted or otherwise transformed
+    /// content where the final size is only known after processing. In such cases the server may
+    /// still provide a `Content-Length` for the encrypted payload, which can differ from the final
+    /// size of the decrypted content. See [`DynamicLength`] for reported vs gathered semantics.
+    fn content_length(&self) -> ContentLength;
 
     /// Seeks to a specific position in the stream. This method is only called if the
     /// requested range has not been downloaded, so this method should jump to the
@@ -119,7 +272,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     requested_position: RequestedPosition,
     position_reached: PositionReached,
     notify_read: NotifyRead,
-    content_length: Option<u64>,
+    content_length: ContentLength,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     prefetch_bytes: u64,
@@ -140,7 +293,7 @@ where
 {
     pub(crate) fn new(
         writer: W,
-        content_length: Option<u64>,
+        content_length: ContentLength,
         settings: Settings<S>,
         cancellation_token: CancellationToken,
     ) -> Self {
@@ -237,6 +390,7 @@ where
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
             let current_stream_position = self.writer.stream_position()?;
+            let content_length = self.content_length.current_value();
             if self.prefetch_complete {
                 debug!("re-starting prefetch");
                 self.prefetch_start_position = position;
@@ -247,7 +401,7 @@ where
                     .add(self.prefetch_start_position..current_stream_position);
                 self.prefetch_complete = true;
             }
-            if let Some(content_length) = self.content_length {
+            if let Some(content_length) = content_length {
                 // Get the minimum possible start position to ensure we capture the entire range
                 let min_start_position = current_stream_position.min(position);
                 debug!(
@@ -256,8 +410,8 @@ where
                     "checking for seek range",
                 );
                 if let Some(gap) = self.downloaded.next_gap(min_start_position..content_length) {
-                    // Gap start may be too low if we're seeking forward, so check it against the
-                    // position
+                    // Gap start may be too low if we're seeking forward, so check it against
+                    // the position
                     let seek_start = gap.start.max(position);
                     debug!(seek_start, seek_end = gap.end, "requesting seek range");
                     self.seek(stream, seek_start, Some(gap.end)).await?;
@@ -294,6 +448,10 @@ where
         start_position: u64,
         download_start: Instant,
     ) -> io::Result<DownloadAction> {
+        // Update the content length to reflect the fetched data
+        if let ContentLength::Dynamic(_) = self.content_length {
+            self.content_length = stream.content_length();
+        }
         let Some(bytes) = bytes else {
             self.prefetch_complete = true;
             debug!("file shorter than prefetch length, download finished");
@@ -329,8 +487,9 @@ where
     }
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
+        let content_length = self.content_length.current_value();
         if stream.supports_seek()
-            && let Some(content_length) = self.content_length
+            && let Some(content_length) = content_length
         {
             let gap = self.downloaded.next_gap(0..content_length);
             if let Some(gap) = gap {
