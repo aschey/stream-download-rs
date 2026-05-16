@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     protocol.register().unwrap();
 
     mpv.command("loadfile", &[&format!("stream://{url}"), "append-play"])?;
-    let mut mpv_client = mpv.create_client(None)?;
+    let mpv_client = mpv.create_client(None)?;
     tokio::task::spawn_blocking(move || {
         loop {
             let ev = mpv_client
@@ -106,6 +106,7 @@ fn read(stream: &mut Stream, buf: &mut [i8]) -> i64 {
     stream.reader.read(buf).unwrap() as i64
 }
 
+// False positive - the callback function requires Box<Stream>
 #[expect(clippy::boxed_local)]
 fn close(stream: Box<Stream>) {
     stream.reader.cancel_download();
