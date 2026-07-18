@@ -17,7 +17,7 @@ keywords = ["audio", "stream", "media"]
 [workspace.dependencies]
 async-trait = "0.1.68"
 bytes = "1.10"
-educe = "0.6"
+educe = "0.7"
 futures-util = "0.3"
 mediatype = "0.21"
 opendal = "0.56"
