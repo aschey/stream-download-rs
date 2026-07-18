@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.2](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.1..stream-download-v0.24.2) - 2026-07-18
+
+### Dependencies
+
+- *(deps)* Update educe requirement from 0.6 to 0.7 ([#275](https://github.com/aschey/stream-download-rs/issues/275)) - ([b94e1e4](https://github.com/aschey/stream-download-rs/commit/b94e1e4f2cbab22aad7f931bfc3c439a502123c7))
+
+
 ## [0.24.1](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.0..stream-download-v0.24.1) - 2026-05-02
 
 ### Miscellaneous Tasks
