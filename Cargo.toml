@@ -5,7 +5,7 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 authors = ["Austin Schey <aschey13@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aschey/stream-download-rs"
@@ -17,7 +17,7 @@ keywords = ["audio", "stream", "media"]
 [workspace.dependencies]
 async-trait = "0.1.68"
 bytes = "1.10"
-educe = "0.6"
+educe = "0.7"
 futures-util = "0.3"
 mediatype = "0.21"
 opendal = "0.57"
