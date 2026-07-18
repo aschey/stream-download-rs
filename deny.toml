@@ -40,8 +40,14 @@ name = "libmpv2-sys"
 [advisories]
 version = 2
 yanked = "deny"
-# These are for a transitive dependency on rustls-webpki. Remove when dependencies are updated.
-ignore = ["RUSTSEC-2026-0098", "RUSTSEC-2026-0099", "RUSTSEC-2026-0104"]
+# These are for a transitive dependencies. Remove when dependencies are updated.
+ignore = [
+  "RUSTSEC-2026-0098",
+  "RUSTSEC-2026-0099",
+  "RUSTSEC-2026-0104",
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
+]
 
 [bans]
 multiple-versions = "allow"
