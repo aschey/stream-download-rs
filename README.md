@@ -56,7 +56,7 @@ cargo add stream-download
 - `registry` - adds a method for routing inputs to different stream handlers
   based on a set of rules.
 
-**NOTE**: The default features in this create also enable `reqwest`'s default features. If
+**NOTE**: The default features in this crate also enable `reqwest`'s default features. If
 you need to disable some of these, disable the default features from this crate
 and enable the
 [features](https://docs.rs/reqwest/latest/reqwest/#optional-features) you need.
