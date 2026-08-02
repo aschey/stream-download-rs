@@ -112,7 +112,7 @@ fn new_with_middleware(#[case] prefetch_bytes: u64) {
 fn open_dal_chunk_size(#[case] prefetch_bytes: u64, #[values(745, 1234, 4096)] chunk_size: usize) {
     SERVER_RT.block_on(async move {
         let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
-        let operator = Operator::new(builder).unwrap().finish();
+        let operator = Operator::new(builder).unwrap();
         let mut reader = StreamDownload::new_opendal(
             OpendalStreamParams::new(operator, "music.mp3")
                 .chunk_size(NonZeroUsize::new(chunk_size).unwrap()),
@@ -193,7 +193,7 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
 fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
     SERVER_RT.block_on(async move {
         let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
-        let operator = Operator::new(builder).unwrap().finish();
+        let operator = Operator::new(builder).unwrap();
         let stream = OpendalStream::new(OpendalStreamParams::new(operator, "music.mp3"))
             .await
             .unwrap();
@@ -856,7 +856,7 @@ fn seek_basic_open_dal(
     SERVER_RT.block_on(async move {
         let builder = services::Http::default().endpoint(&format!("http://{}", server_addr()));
 
-        let operator = Operator::new(builder).unwrap().finish();
+        let operator = Operator::new(builder).unwrap();
 
         let mut reader = StreamDownload::new::<OpendalStream>(
             OpendalStreamParams::new(operator, "music.mp3"),

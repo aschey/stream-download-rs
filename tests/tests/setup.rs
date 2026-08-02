@@ -245,6 +245,8 @@ impl http::ClientResponse for TestResponse {
 #[derive(Clone)]
 pub struct ErrorTestStorageProvider(pub MemoryStorageProvider);
 
+// false positive
+#[allow(dead_code)]
 pub struct ErrorTestStorage(MemoryStorage);
 
 impl Write for ErrorTestStorage {

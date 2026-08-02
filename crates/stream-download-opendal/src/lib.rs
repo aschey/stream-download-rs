@@ -47,7 +47,7 @@ where
     ///         .access_key_id("test")
     ///         .secret_access_key("test")
     ///         .bucket("my-bucket");
-    ///     let operator = Operator::new(builder)?.finish();
+    ///     let operator = Operator::new(builder)?;
     ///
     ///     let mut reader = StreamDownload::new_opendal(
     ///         OpendalStreamParams::new(operator, "some-object-key"),
