@@ -34,7 +34,7 @@ storage services. The list of supported services is
          .secret_access_key("test")
          .bucket("my-bucket");
 
-     let operator = Operator::new(builder)?.finish();
+     let operator = Operator::new(builder)?;
      let stream = OpendalStream::new(OpendalStreamParams::new(operator, "some-object-key")).await?;
 
      Ok(())

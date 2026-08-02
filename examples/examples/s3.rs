@@ -56,9 +56,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .secret_access_key(SECRET_ACCESS_KEY)
         .bucket(S3_BUCKET);
 
-    let operator = Operator::new(builder)?
-        .layer(LoggingLayer::default())
-        .finish();
+    let operator = Operator::new(builder)?.layer(LoggingLayer::default());
 
     let reader = StreamDownload::new_opendal(
         OpendalStreamParams::new(operator, S3_KEY),
