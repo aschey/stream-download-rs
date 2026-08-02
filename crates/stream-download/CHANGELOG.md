@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.4](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.3..stream-download-v0.24.4) - 2026-08-02
+
+### Miscellaneous Tasks
+
+- Typo ([#282](https://github.com/aschey/stream-download-rs/issues/282)) - ([683aca0](https://github.com/aschey/stream-download-rs/commit/683aca0c88e4e2a826bb2f67fa3babfe314fcdbe))
+
+
 ## [0.24.3](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.2..stream-download-v0.24.3) - 2026-08-02
 
 ### Dependencies
