@@ -31,7 +31,8 @@ fn get_header_str<K: AsHeaderName>(headers: &HeaderMap, key: K) -> Option<&str> 
 pub struct FetchError {
     #[source]
     source: reqwest::Error,
-    response: reqwest::Response,
+    // Box to prevent large error variant warnings
+    response: Box<reqwest::Response>,
 }
 
 impl FetchError {
@@ -80,7 +81,7 @@ impl ClientResponse for reqwest::Response {
         if let Err(error) = self.error_for_status_ref() {
             Err(FetchError {
                 source: error,
-                response: self,
+                response: Box::new(self),
             })
         } else {
             Ok(self)
