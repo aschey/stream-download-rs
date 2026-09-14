@@ -1,6 +1,6 @@
 [package]
 name = "stream-download-opendal"
-version = "0.11.2"
+version = "0.12.0"
 readme = "README.md"
 description = "OpenDAL adapter for stream-download"
 edition.workspace = true
