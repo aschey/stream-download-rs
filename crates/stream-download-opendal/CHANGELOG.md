@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.11.2](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.11.1..stream-download-opendal-v0.11.2) - 2026-09-14
+## [0.12.0](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.11.1..stream-download-opendal-v0.12.0) - 2026-09-14
 
 ### Miscellaneous Tasks
 
