@@ -400,7 +400,11 @@ impl<P: StorageProvider> StreamDownload<P> {
         let (reader, writer) = storage_provider
             .into_reader_writer(content_length)
             .map_err(StreamInitializationError::StorageCreationFailure)?;
-        let cancellation_token = CancellationToken::new();
+        let cancellation_token = settings
+            .cancellation_token
+            .as_ref()
+            .map(CancellationToken::child_token)
+            .unwrap_or_else(CancellationToken::new);
         let cancel_on_drop = settings.cancel_on_drop;
         let mut source = Source::new(writer, content_length, settings, cancellation_token.clone());
         let handle = source.source_handle();
