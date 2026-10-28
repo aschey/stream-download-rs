@@ -9,7 +9,6 @@ rust-version = "1.91.0"
 authors = ["Austin Schey <aschey13@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aschey/stream-download-rs"
-homepage = "https://github.com/aschey/stream-download-rs"
 include = ["/src", "/examples", "/tests", "LICENSE-MIT", "LICENSE-APACHE"]
 categories = ["multimedia", "asynchronous", "caching"]
 keywords = ["audio", "stream", "media"]
@@ -17,7 +16,7 @@ keywords = ["audio", "stream", "media"]
 [workspace.dependencies]
 async-trait = "0.1.68"
 bytes = "1.11.1"
-educe = "0.7"
+educe = "0.8"
 futures-util = "0.3"
 mediatype = "0.23"
 opendal = "0.59"

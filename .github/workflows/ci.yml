@@ -125,7 +125,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev
       - name: Check typos
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@v1
       - name: rustfmt
         run: cargo +nightly fmt --all --check
       - name: Verify docs
@@ -135,6 +135,10 @@ jobs:
 
       - name: Lint dependencies
         uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # Excluding advisories because cargo deny has no option to only include direct dependencies
+          # and there's nothing we can do to force updates in transitive dependencies
+          command-arguments: bans licenses sources
 
       # disabling until https://github.com/rustsec/audit-check/issues/28 is fixed
       # - name: Security vulnerabilities audit
