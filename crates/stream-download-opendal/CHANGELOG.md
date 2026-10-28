@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.1](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.12.0..stream-download-opendal-v0.12.1) - 2026-10-28
+
+### Dependencies
+
+- *(deps)* Update educe requirement from 0.7 to 0.8 ([#290](https://github.com/aschey/stream-download-rs/issues/290)) - ([836e6bb](https://github.com/aschey/stream-download-rs/commit/836e6bb0c15b697d74de22e51c9a1bc4ad9b8d99))
+
+
 ## [0.12.0](https://github.com/aschey/stream-download-rs/compare/stream-download-opendal-v0.11.1..stream-download-opendal-v0.12.0) - 2026-09-14
 
 ### Miscellaneous Tasks
