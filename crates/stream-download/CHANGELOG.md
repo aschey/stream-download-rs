@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.5](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.4..stream-download-v0.24.5) - 2026-10-28
+
+### Dependencies
+
+- *(deps)* Update educe requirement from 0.7 to 0.8 ([#290](https://github.com/aschey/stream-download-rs/issues/290)) - ([836e6bb](https://github.com/aschey/stream-download-rs/commit/836e6bb0c15b697d74de22e51c9a1bc4ad9b8d99))
+- *(deps)* Update parking_lot requirement from 0.12.1 to 0.13.0 ([#298](https://github.com/aschey/stream-download-rs/issues/298)) - ([482699f](https://github.com/aschey/stream-download-rs/commit/482699f9e7ae40774027bb679c54680e5460c471))
+
+
 ## [0.24.4](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.3..stream-download-v0.24.4) - 2026-08-29
 
 ### Miscellaneous Tasks
