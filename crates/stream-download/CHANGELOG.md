@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.6](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.5..stream-download-v0.24.6) - 2026-11-15
+
+### Features
+
+- Set cancellation token on settings ([#295](https://github.com/aschey/stream-download-rs/issues/295)) - ([bef2204](https://github.com/aschey/stream-download-rs/commit/bef22046d469e09c85498a0697c17a6d7a21f4b6))
+
+
 ## [0.24.5](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.4..stream-download-v0.24.5) - 2026-10-28
 
 ### Dependencies
