@@ -30,7 +30,7 @@ reqwest-middleware = "0.5"
 tempfile = "3.1"
 thiserror = "2.0.3"
 tokio = "1.52"
-tokio-util = "0.7.18"
+tokio-util = "0.7.19"
 tracing = "0.1.44"
 url = "2.5"
 

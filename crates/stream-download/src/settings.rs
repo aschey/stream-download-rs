@@ -57,7 +57,7 @@ pub struct Settings<S> {
     pub(crate) on_progress: Option<ProgressFn<S>>,
     #[educe(Debug = false, PartialEq = false)]
     pub(crate) on_reconnect: Option<ReconnectFn<S>>,
-    pub(crate) cancellation_token: Option<CancellationToken>,
+    pub(crate) cancellation_token: CancellationToken,
 }
 
 impl<S> Default for Settings<S> {
@@ -69,7 +69,7 @@ impl<S> Default for Settings<S> {
             cancel_on_drop: true,
             on_progress: None,
             on_reconnect: None,
-            cancellation_token: None,
+            cancellation_token: CancellationToken::new(),
         }
     }
 }
@@ -170,11 +170,9 @@ impl<S> Settings<S> {
     /// Attach a [`CancellationToken`] that can be used to cancel the stream from outside the stream
     /// task.
     #[must_use]
-    pub fn cancellation_token(self, token: CancellationToken) -> Self {
-        Self {
-            cancellation_token: Some(token),
-            ..self
-        }
+    pub fn cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = token;
+        self
     }
 
     /// Retrieves the configured prefetch bytes
