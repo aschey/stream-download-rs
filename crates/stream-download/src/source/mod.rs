@@ -133,6 +133,18 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     cancellation_token: CancellationToken,
 }
 
+impl<S: SourceStream, W: StorageWriter> Drop for Source<S, W> {
+    fn drop(&mut self) {
+        // If the download task is dropped before it finishes (e.g. the runtime is shutting down),
+        // any reader blocked waiting for data would otherwise wait forever.
+        if !self.position_reached.is_stream_done() {
+            debug!("download task dropped before completion");
+            self.download_status.set_failed();
+            self.position_reached.notify_stream_done();
+        }
+    }
+}
+
 impl<S, W> Source<S, W>
 where
     S: SourceStream<Error: Debug>,

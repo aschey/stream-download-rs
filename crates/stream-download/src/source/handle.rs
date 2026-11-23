@@ -127,6 +127,11 @@ impl PositionReached {
         cvar.notify_all();
     }
 
+    pub(super) fn is_stream_done(&self) -> bool {
+        let (mutex, _) = self.0.as_ref();
+        mutex.lock().stream_done
+    }
+
     fn wait_for_position_reached(&self) {
         let (mutex, cvar) = self.0.as_ref();
         let mut waiter = mutex.lock();
