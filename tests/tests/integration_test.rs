@@ -1,6 +1,8 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::num::NonZeroUsize;
 use std::panic::{RefUnwindSafe, UnwindSafe};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fs, io};
 
@@ -20,6 +22,7 @@ use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload, StreamInitializationError, StreamState, http};
 use stream_download_opendal::{OpendalStream, OpendalStreamParams, StreamDownloadExt};
+use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::spawn_blocking;
 
@@ -470,6 +473,53 @@ fn cancel_on_drop(
         // don't care if this errors because channel send will fail due to stream being dropped
         let _ = handle.await;
     });
+}
+
+/// An [`AsyncRead`] that never yields any data, so the download never finishes on its own.
+struct NeverReady;
+
+impl AsyncRead for NeverReady {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Poll::Pending
+    }
+}
+
+#[rstest]
+fn runtime_shutdown_unblocks_reader() {
+    let (result_tx, result_rx) = std::sync::mpsc::channel();
+
+    // Run on a separate thread so a regression fails the test instead of hanging the test binary.
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let (read_tx, read_rx) = std::sync::mpsc::channel();
+        rt.block_on(async move {
+            let mut reader = StreamDownload::new_async_read(
+                AsyncReadStreamParams::new(NeverReady),
+                MemoryStorageProvider,
+                Settings::default(),
+            )
+            .await
+            .unwrap();
+            spawn_blocking(move || {
+                let mut buf = [0; 1];
+                read_tx.send(reader.read(&mut buf)).unwrap();
+            });
+            // Give the reader time to start waiting for data.
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        });
+        // Dropping the runtime drops the download task and waits for blocking tasks to finish.
+        drop(rt);
+        result_tx.send(read_rx.recv().unwrap()).unwrap();
+    });
+
+    let result = result_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("reader was not unblocked after the runtime shut down");
+    assert!(result.is_err());
 }
 
 #[rstest]
