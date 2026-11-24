@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.24.7](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.6..stream-download-v0.24.7) - 2026-11-24
+
+### Bug Fixes
+
+- Unblock readers when the download task is dropped ([#302](https://github.com/aschey/stream-download-rs/issues/302)) - ([4f2c005](https://github.com/aschey/stream-download-rs/commit/4f2c0054ca231becbf3ab899f4c5a64ebc777cef))
+
+
 ## [0.24.6](https://github.com/aschey/stream-download-rs/compare/stream-download-v0.24.5..stream-download-v0.24.6) - 2026-11-15
 
 ### Features
