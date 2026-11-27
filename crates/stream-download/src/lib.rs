@@ -10,7 +10,7 @@ use std::io::{self, Read, Seek, SeekFrom};
 use educe::Educe;
 pub use settings::*;
 use source::handle::SourceHandle;
-use source::{ContentLength, DecodeError, Source, SourceStream};
+use source::{DecodeError, Source, SourceStream};
 use storage::StorageProvider;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument, trace};
@@ -66,7 +66,6 @@ pub struct StreamDownload<P: StorageProvider> {
     handle: SourceHandle,
     download_task_cancellation_token: CancellationToken,
     cancel_on_drop: bool,
-    content_length: ContentLength,
     storage_capacity: Option<usize>,
 }
 
@@ -378,8 +377,11 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     /// Returns the content length of the stream, if available.
+    ///
+    /// If the stream has a [dynamic](source::ContentLength::Dynamic) content length, this is the
+    /// latest known value and may change while the stream is downloading.
     pub fn content_length(&self) -> Option<u64> {
-        self.content_length.current_value()
+        self.handle.content_length().current_value()
     }
 
     async fn from_create_stream<S, F, Fut>(
@@ -398,7 +400,7 @@ impl<P: StorageProvider> StreamDownload<P> {
         let content_length = stream.content_length();
         let storage_capacity = storage_provider.max_capacity();
         let (reader, writer) = storage_provider
-            .into_reader_writer(content_length.current_value())
+            .into_reader_writer(content_length.final_value())
             .map_err(StreamInitializationError::StorageCreationFailure)?;
         let cancellation_token = settings.cancellation_token.child_token();
         let cancel_on_drop = settings.cancel_on_drop;
@@ -419,7 +421,6 @@ impl<P: StorageProvider> StreamDownload<P> {
             handle,
             download_task_cancellation_token: cancellation_token,
             cancel_on_drop,
-            content_length,
             storage_capacity,
         })
     }
@@ -436,13 +437,15 @@ impl<P: StorageProvider> StreamDownload<P> {
             }
             SeekFrom::End(position) => {
                 debug!(seek_position = position, "seeking from end");
-                let content_length = self.handle.content_length().current_value();
+                // A dynamic length that's still changing could produce the wrong position, so
+                // only allow this once the final length is known.
+                let content_length = self.handle.content_length().final_value();
                 if let Some(length) = content_length {
                     (length as i64 + position) as u64
                 } else {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
-                        "cannot seek from end when content length is unknown",
+                        "cannot seek from end when the final content length is unknown",
                     ));
                 }
             }
@@ -458,7 +461,7 @@ impl<P: StorageProvider> StreamDownload<P> {
     }
 
     fn normalize_requested_position(&self, requested_position: u64) -> u64 {
-        let content_length = self.content_length.current_value();
+        let content_length = self.handle.content_length().final_value();
         if let Some(content_length) = content_length {
             // ensure we don't request a position beyond the end of the stream
             requested_position.min(content_length)

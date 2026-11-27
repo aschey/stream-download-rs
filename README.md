@@ -146,7 +146,7 @@ use stream_download::http::HttpStream;
 use stream_download::http::reqwest::Client;
 use stream_download::source::DecodeError;
 use stream_download::source::SourceStream;
-use stream_download::storage::ContentLength;
+use stream_download::source::ContentLength;
 use stream_download::storage::temp::TempStorageProvider;
 use stream_download::{Settings, StreamDownload};
 

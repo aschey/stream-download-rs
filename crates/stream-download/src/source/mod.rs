@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_util::{Future, Stream, StreamExt, TryStream};
 use handle::{
-    DownloadStatus, Downloaded, NotifyRead, PositionReached, RequestedPosition, SourceHandle,
+    DownloadStatus, Downloaded, NotifyRead, PositionReached, RequestedPosition,
+    SharedContentLength, SourceHandle,
 };
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
@@ -92,6 +93,16 @@ impl DynamicLength {
     fn new(reported: u64, gathered: Option<u64>) -> Self {
         Self { reported, gathered }
     }
+
+    /// Returns the length reported by the source before any processing.
+    pub fn reported(&self) -> u64 {
+        self.reported
+    }
+
+    /// Returns the final length after processing, or `None` if it isn't known yet.
+    pub fn gathered(&self) -> Option<u64> {
+        self.gathered
+    }
 }
 
 impl ContentLength {
@@ -126,6 +137,19 @@ impl ContentLength {
         match self {
             Self::Static(len) => Some(*len),
             Self::Dynamic(len) => Some(len.gathered.unwrap_or(len.reported)),
+            Self::Unknown => None,
+        }
+    }
+
+    /// Returns the content length only if it's known and will not change.
+    ///
+    /// This is the exact length for static lengths and for dynamic lengths whose final value has
+    /// been gathered. Dynamic lengths that are still being calculated are treated the same as
+    /// unknown lengths and return `None`.
+    pub fn final_value(&self) -> Option<u64> {
+        match self {
+            Self::Static(len) => Some(*len),
+            Self::Dynamic(len) => len.gathered,
             Self::Unknown => None,
         }
     }
@@ -272,7 +296,7 @@ pub(crate) struct Source<S: SourceStream, W: StorageWriter> {
     requested_position: RequestedPosition,
     position_reached: PositionReached,
     notify_read: NotifyRead,
-    content_length: ContentLength,
+    content_length: SharedContentLength,
     seek_tx: mpsc::Sender<u64>,
     seek_rx: mpsc::Receiver<u64>,
     prefetch_bytes: u64,
@@ -321,7 +345,7 @@ where
             notify_read: NotifyRead::default(),
             seek_tx,
             seek_rx,
-            content_length,
+            content_length: SharedContentLength::new(content_length),
             prefetch_complete: settings.prefetch_bytes == 0,
             prefetch_bytes: settings.prefetch_bytes,
             batch_write_size: settings.batch_write_size,
@@ -402,7 +426,7 @@ where
         if self.should_seek(stream, position)? {
             debug!("seek position not yet downloaded");
             let current_stream_position = self.writer.stream_position()?;
-            let content_length = self.content_length.current_value();
+            let content_length = self.content_length.get().final_value();
             if self.prefetch_complete {
                 debug!("re-starting prefetch");
                 self.prefetch_start_position = position;
@@ -460,10 +484,6 @@ where
         start_position: u64,
         download_start: Instant,
     ) -> io::Result<DownloadAction> {
-        // Update the content length to reflect the fetched data
-        if let ContentLength::Dynamic(_) = self.content_length {
-            self.content_length = stream.content_length();
-        }
         let Some(bytes) = bytes else {
             self.prefetch_complete = true;
             debug!("file shorter than prefetch length, download finished");
@@ -499,7 +519,7 @@ where
     }
 
     async fn finish_or_find_next_gap(&mut self, stream: &mut S) -> io::Result<DownloadAction> {
-        let content_length = self.content_length.current_value();
+        let content_length = self.content_length.get().final_value();
         if stream.supports_seek()
             && let Some(content_length) = content_length
         {
@@ -546,6 +566,7 @@ where
                 return Ok(DownloadAction::Continue);
             }
         };
+        self.refresh_content_length(stream);
 
         if !self.prefetch_complete {
             return self
@@ -571,6 +592,15 @@ where
         self.report_downloading_progress(stream, new_position, download_start, bytes_len)?;
 
         Ok(DownloadAction::Continue)
+    }
+
+    fn refresh_content_length(&self, stream: &S) {
+        // A dynamic length may change as the stream is processed, so keep the shared value in
+        // sync with the stream. This also runs when the stream ends, which is usually when the
+        // final length becomes known.
+        if let ContentLength::Dynamic(_) = self.content_length.get() {
+            self.content_length.set(stream.content_length());
+        }
     }
 
     async fn write(&mut self, bytes: Bytes) -> io::Result<u64> {
@@ -718,7 +748,7 @@ where
             notify_read: self.notify_read.clone(),
             position_reached: self.position_reached.clone(),
             seek_tx: self.seek_tx.clone(),
-            content_length: self.content_length,
+            content_length: self.content_length.clone(),
         }
     }
 }

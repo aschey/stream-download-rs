@@ -19,7 +19,7 @@ pub(crate) struct SourceHandle {
     pub(super) download_status: DownloadStatus,
     pub(super) requested_position: RequestedPosition,
     pub(super) position_reached: PositionReached,
-    pub(super) content_length: ContentLength,
+    pub(super) content_length: SharedContentLength,
     pub(super) seek_tx: mpsc::Sender<u64>,
     pub(super) notify_read: NotifyRead,
 }
@@ -54,7 +54,7 @@ impl SourceHandle {
     }
 
     pub(crate) fn content_length(&self) -> ContentLength {
-        self.content_length
+        self.content_length.get()
     }
 
     pub(crate) fn is_failed(&self) -> bool {
@@ -153,6 +153,25 @@ impl PositionReached {
         if !waiter.stream_done {
             waiter.position_reached = false;
         }
+    }
+}
+
+/// Content length shared between the download task and the reader so that updates to a dynamic
+/// length are visible to both.
+#[derive(Debug, Clone)]
+pub(super) struct SharedContentLength(Arc<AssertUnwindSafe<RwLock<ContentLength>>>);
+
+impl SharedContentLength {
+    pub(super) fn new(content_length: ContentLength) -> Self {
+        Self(Arc::new(AssertUnwindSafe(RwLock::new(content_length))))
+    }
+
+    pub(super) fn get(&self) -> ContentLength {
+        *self.0.read()
+    }
+
+    pub(super) fn set(&self, content_length: ContentLength) {
+        *self.0.write() = content_length;
     }
 }
 

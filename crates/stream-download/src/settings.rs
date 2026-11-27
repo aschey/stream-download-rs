@@ -139,8 +139,7 @@ impl<S> Settings<S> {
     /// use reqwest::Client;
     /// use stream_download::Settings;
     /// use stream_download::http::HttpStream;
-    /// use stream_download::source::SourceStream;
-    /// use stream_download::storage::ContentLength;
+    /// use stream_download::source::{ContentLength, SourceStream};
     ///
     /// let settings = Settings::default();
     /// settings.on_progress(|stream: &HttpStream<Client>, state, _| {
