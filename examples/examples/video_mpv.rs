@@ -80,8 +80,7 @@ fn open(_: &mut (), uri: &str) -> Stream {
     handle
         .block_on(async move {
             let stream = HttpStream::<Client>::create(uri["stream://".len()..].parse()?).await?;
-            let content_length: Option<u64> = stream.content_length().into();
-            let content_length = content_length.unwrap_or_default();
+            let content_length = stream.content_length().current_value().unwrap_or_default();
             let reader = match StreamDownload::from_stream(
                 stream,
                 TempStorageProvider::new(),
@@ -109,7 +108,6 @@ fn read(stream: &mut Stream, buf: &mut [i8]) -> i64 {
 
 // False positive - the callback function requires Box<Stream>
 #[expect(clippy::boxed_local)]
-#[allow(unfulfilled_lint_expectations)]
 fn close(stream: Box<Stream>) {
     stream.reader.cancel_download();
 }

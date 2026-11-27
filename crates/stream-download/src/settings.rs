@@ -103,7 +103,7 @@ impl<S> Settings<S> {
 
     /// If there is no new data for a duration greater than this timeout, we will attempt to
     /// reconnect to the server.
-    ///
+    ///  
     /// This timeout is designed to help streams recover during temporary network failures,
     /// but you may need to increase this if you're seeing warnings about timeouts in the logs
     /// under normal network conditions.
@@ -139,17 +139,12 @@ impl<S> Settings<S> {
     /// use reqwest::Client;
     /// use stream_download::Settings;
     /// use stream_download::http::HttpStream;
-    /// use stream_download::source::{ContentLength, SourceStream};
+    /// use stream_download::source::SourceStream;
     ///
     /// let settings = Settings::default();
     /// settings.on_progress(|stream: &HttpStream<Client>, state, _| {
-    ///     let content_length = stream.content_length();
-    ///     assert!(
-    ///         content_length != ContentLength::Unknown,
-    ///         "Content length is unknown"
-    ///     );
-    ///     let content_length: Option<u64> = content_length.into();
-    ///     let progress = state.current_position as f32 / content_length.unwrap() as f32;
+    ///     let content_length = stream.content_length().current_value().unwrap();
+    ///     let progress = state.current_position as f32 / content_length as f32;
     ///     println!("progress: {}%", progress * 100.0);
     /// });
     /// ```

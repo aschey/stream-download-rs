@@ -87,9 +87,6 @@ pub enum ContentLength {
 }
 
 impl DynamicLength {
-    /// Creates a new dynamic content length.
-    ///
-    /// This is typically used for encrypted media content.
     fn new(reported: u64, gathered: Option<u64>) -> Self {
         Self { reported, gathered }
     }
@@ -115,14 +112,15 @@ impl ContentLength {
 
     /// Creates a new dynamic content length.
     ///
-    /// This is typically used for media content that has an unknown size.
+    /// `reported` is the length reported by the source before processing, and `gathered` is the
+    /// final length after processing, or `None` if it isn't known yet.
     pub fn new_dynamic(reported: u64, gathered: Option<u64>) -> Self {
         Self::Dynamic(DynamicLength::new(reported, gathered))
     }
 
     /// Creates a new unknown content length.
     ///
-    /// This is typically used for media content that has an unknown size.
+    /// This is typically used for infinite streams or streams without a known size.
     pub fn new_unknown() -> Self {
         Self::Unknown
     }
@@ -175,21 +173,13 @@ impl From<ContentLength> for Option<u64> {
 
 impl PartialEq<u64> for ContentLength {
     fn eq(&self, other: &u64) -> bool {
-        match self {
-            Self::Static(len) => len == other,
-            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported) == *other,
-            Self::Unknown => false,
-        }
+        self.current_value() == Some(*other)
     }
 }
 
 impl PartialOrd<u64> for ContentLength {
     fn partial_cmp(&self, other: &u64) -> Option<std::cmp::Ordering> {
-        match self {
-            Self::Static(len) => len.partial_cmp(other),
-            Self::Dynamic(len) => len.gathered.unwrap_or(len.reported).partial_cmp(other),
-            Self::Unknown => None,
-        }
+        self.current_value()?.partial_cmp(other)
     }
 }
 

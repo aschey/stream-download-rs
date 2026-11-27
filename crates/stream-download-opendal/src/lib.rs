@@ -151,23 +151,24 @@ impl OpendalStream {
     #[instrument]
     pub async fn new(params: OpendalStreamParams) -> Result<Self, Error> {
         let stat = params.operator.stat(&params.path).await?;
-        let content_type = stat.content_type().map(ToString::to_string);
-        let reader = params.operator.reader(&params.path).await?;
-        let async_reader = reader.clone().into_futures_async_read(..).await?.compat();
 
         let content_length = stat.content_length();
-        let content_length = if content_length > 0 {
-            ContentLength::Static(content_length)
-        } else {
-            ContentLength::Unknown
-        };
+        let content_type = stat.content_type().map(ToString::to_string);
+
+        let reader = params.operator.reader(&params.path).await?;
+
+        let async_reader = reader.clone().into_futures_async_read(..).await?.compat();
 
         Ok(Self {
             async_reader,
             reader,
             buf: BytesMut::with_capacity(params.chunk_size),
             capacity: params.chunk_size,
-            content_length,
+            content_length: if content_length > 0 {
+                ContentLength::Static(content_length)
+            } else {
+                ContentLength::Unknown
+            },
             content_type,
         })
     }

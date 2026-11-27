@@ -158,8 +158,10 @@ fn from_stream_http(#[case] prefetch_bytes: u64) {
         .unwrap();
 
         let file_buf = get_file_buf();
-        let content_length: Option<u64> = stream.content_length().into();
-        assert_eq!(file_buf.len() as u64, content_length.unwrap());
+        assert_eq!(
+            Some(file_buf.len() as u64),
+            stream.content_length().current_value()
+        );
         assert_eq!(
             http::ContentType {
                 r#type: "audio".to_owned(),
@@ -206,8 +208,10 @@ fn from_stream_open_dal(#[case] prefetch_bytes: u64) {
             .unwrap();
 
         let file_buf = get_file_buf();
-        let content_length: Option<u64> = stream.content_length().into();
-        assert_eq!(file_buf.len() as u64, content_length.unwrap());
+        assert_eq!(
+            Some(file_buf.len() as u64),
+            stream.content_length().current_value()
+        );
         assert_eq!("audio/mpeg", stream.content_type().unwrap());
 
         let mut reader = StreamDownload::from_stream(
@@ -1269,8 +1273,7 @@ fn on_progress(#[case] prefetch_bytes: u64) {
                     stream_download::StreamPhase::Downloading { .. }
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    let content_length: Option<u64> = next.0.into();
-                    return content_length.unwrap();
+                    return next.0.current_value().unwrap();
                 }
             }
         });
@@ -1323,8 +1326,7 @@ fn on_progress_no_prefetch() {
                     stream_download::StreamPhase::Downloading { .. }
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    let content_length: Option<u64> = next.0.into();
-                    return content_length.unwrap();
+                    return next.0.current_value().unwrap();
                 }
             }
         });
@@ -1378,8 +1380,7 @@ fn on_progress_excessive_prefetch(#[case] prefetch_bytes: u64) {
                     stream_download::StreamPhase::Prefetching { .. },
                 ) {
                     assert_eq!(next.1.phase, stream_download::StreamPhase::Complete);
-                    let content_length: Option<u64> = next.0.into();
-                    return content_length.unwrap();
+                    return next.0.current_value().unwrap();
                 }
             }
         });
