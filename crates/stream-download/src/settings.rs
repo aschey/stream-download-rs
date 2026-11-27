@@ -143,7 +143,8 @@ impl<S> Settings<S> {
     ///
     /// let settings = Settings::default();
     /// settings.on_progress(|stream: &HttpStream<Client>, state, _| {
-    ///     let progress = state.current_position as f32 / stream.content_length().unwrap() as f32;
+    ///     let content_length = stream.content_length().current_value().unwrap();
+    ///     let progress = state.current_position as f32 / content_length as f32;
     ///     println!("progress: {}%", progress * 100.0);
     /// });
     /// ```

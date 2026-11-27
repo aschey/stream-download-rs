@@ -80,7 +80,7 @@ fn open(_: &mut (), uri: &str) -> Stream {
     handle
         .block_on(async move {
             let stream = HttpStream::<Client>::create(uri["stream://".len()..].parse()?).await?;
-            let content_length = stream.content_length().unwrap_or_default();
+            let content_length = stream.content_length().current_value().unwrap_or_default();
             let reader = match StreamDownload::from_stream(
                 stream,
                 TempStorageProvider::new(),

@@ -9,13 +9,13 @@ use futures_util::Stream;
 use tokio::io::AsyncRead;
 use tokio_util::io::ReaderStream;
 
-use crate::source::SourceStream;
+use crate::source::{ContentLength, SourceStream};
 
 /// Parameters for creating an [`AsyncReadStream`].
 #[derive(Debug)]
 pub struct AsyncReadStreamParams<T> {
     stream: T,
-    content_length: Option<u64>,
+    content_length: ContentLength,
 }
 
 impl<T> AsyncReadStreamParams<T> {
@@ -23,7 +23,7 @@ impl<T> AsyncReadStreamParams<T> {
     pub fn new(stream: T) -> Self {
         Self {
             stream,
-            content_length: None,
+            content_length: ContentLength::Unknown,
         }
     }
 
@@ -33,7 +33,7 @@ impl<T> AsyncReadStreamParams<T> {
     #[must_use]
     pub fn content_length<L>(self, content_length: L) -> Self
     where
-        L: Into<Option<u64>>,
+        L: Into<ContentLength>,
     {
         Self {
             content_length: content_length.into(),
@@ -46,7 +46,7 @@ impl<T> AsyncReadStreamParams<T> {
 #[derive(Debug)]
 pub struct AsyncReadStream<T> {
     stream: ReaderStream<T>,
-    content_length: Option<u64>,
+    content_length: ContentLength,
 }
 
 impl<T> AsyncReadStream<T>
@@ -56,7 +56,7 @@ where
     /// Creates a new [`AsyncReadStream`].
     pub fn new<L>(stream: T, content_length: L) -> Self
     where
-        L: Into<Option<u64>>,
+        L: Into<ContentLength>,
     {
         Self {
             stream: ReaderStream::new(stream),
@@ -77,7 +77,7 @@ where
         Ok(Self::new(params.stream, params.content_length))
     }
 
-    fn content_length(&self) -> Option<u64> {
+    fn content_length(&self) -> ContentLength {
         self.content_length
     }
 

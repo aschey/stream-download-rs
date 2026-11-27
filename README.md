@@ -153,7 +153,7 @@ use stream_download::{Settings, StreamDownload};
 async fn main() -> Result<(), Box<dyn Error>> {
     let stream =
         HttpStream::<Client>::create("https://some-cool-url.com/some-stream".parse()?).await?;
-    let content_length = stream.content_length();
+    let content_length = stream.content_length().current_value();
     let is_infinite = content_length.is_none();
     println!("Infinite stream = {is_infinite}");
 

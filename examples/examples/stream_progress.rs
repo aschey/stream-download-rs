@@ -50,11 +50,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     );
                 }
                 StreamPhase::Downloading { chunk_size, .. } => {
+                    let content_length = stream.content_length().current_value().unwrap();
                     info!(
                         "{:.2?} download progress {:.2}% downloaded: {:?} kb/s: {:.2}",
                         state.elapsed,
-                        (state.current_position as f32 / stream.content_length().unwrap() as f32)
-                            * 100.0,
+                        (state.current_position as f32 / content_length as f32) * 100.0,
                         state.current_chunk,
                         chunk_size as f32 / elapsed.as_nanos() as f32 * 1000.0
                     );
