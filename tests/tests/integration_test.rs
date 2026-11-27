@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::io::{Read, Seek, SeekFrom};
 use std::num::NonZeroUsize;
 use std::panic::{RefUnwindSafe, UnwindSafe};
@@ -6,6 +7,8 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fs, io};
 
+use bytes::Bytes;
+use futures_util::Stream;
 use opendal::{Operator, services};
 use rstest::rstest;
 use setup::{
@@ -522,6 +525,159 @@ fn runtime_shutdown_unblocks_reader() {
         .recv_timeout(Duration::from_secs(5))
         .expect("reader was not unblocked after the runtime shut down");
     assert!(result.is_err());
+}
+
+/// A source whose final length is only known once every chunk has been produced, like a stream
+/// that's decrypted or decompressed while it downloads.
+struct DynamicLengthStream {
+    chunks: VecDeque<Bytes>,
+    reported: u64,
+    total: u64,
+    /// If false, the stream never ends after its last chunk.
+    ends: bool,
+}
+
+impl DynamicLengthStream {
+    fn new(data: &[u8], chunk_size: usize, reported: u64, ends: bool) -> Self {
+        Self {
+            chunks: data
+                .chunks(chunk_size)
+                .map(Bytes::copy_from_slice)
+                .collect(),
+            reported,
+            total: data.len() as u64,
+            ends,
+        }
+    }
+}
+
+impl Stream for DynamicLengthStream {
+    type Item = io::Result<Bytes>;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.chunks.pop_front() {
+            Some(chunk) => Poll::Ready(Some(Ok(chunk))),
+            None if self.ends => Poll::Ready(None),
+            None => Poll::Pending,
+        }
+    }
+}
+
+impl SourceStream for DynamicLengthStream {
+    type Params = Self;
+    type StreamCreationError = std::convert::Infallible;
+
+    async fn create(params: Self::Params) -> Result<Self, Self::StreamCreationError> {
+        Ok(params)
+    }
+
+    fn content_length(&self) -> ContentLength {
+        let gathered = (self.ends && self.chunks.is_empty()).then_some(self.total);
+        ContentLength::new_dynamic(self.reported, gathered)
+    }
+
+    async fn seek_range(&mut self, _start: u64, _end: Option<u64>) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "seek not supported",
+        ))
+    }
+
+    async fn reconnect(&mut self, _current_position: u64) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn supports_seek(&self) -> bool {
+        false
+    }
+}
+
+fn dynamic_test_data(len: usize) -> Vec<u8> {
+    (0..len).map(|i| (i % 251) as u8).collect()
+}
+
+#[rstest]
+fn dynamic_content_length_is_updated(#[values(0, 1, 4096, 256*1024)] prefetch_bytes: u64) {
+    SERVER_RT.block_on(async move {
+        let data = dynamic_test_data(10_000);
+        // The source reports a larger size up front, like an encrypted payload with padding.
+        let reported = data.len() as u64 + 16;
+        let mut reader = StreamDownload::new::<DynamicLengthStream>(
+            DynamicLengthStream::new(&data, 1000, reported, true),
+            MemoryStorageProvider,
+            Settings::default().prefetch_bytes(prefetch_bytes),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+            assert_eq!(data, buf);
+            assert_eq!(Some(data.len() as u64), reader.content_length());
+            // The final length is known now, so seeking from the end is allowed.
+            assert_eq!(data.len() as u64, reader.seek(SeekFrom::End(0)).unwrap());
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[rstest]
+fn dynamic_content_length_does_not_limit_storage() {
+    SERVER_RT.block_on(async move {
+        let data = dynamic_test_data(10_000);
+        // The source reports a smaller size up front, like a compressed payload.
+        let mut reader = StreamDownload::new::<DynamicLengthStream>(
+            DynamicLengthStream::new(&data, 1000, 100, true),
+            BoundedStorageProvider::new(MemoryStorageProvider, 4096.try_into().unwrap()),
+            Settings::default(),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            let mut buf = Vec::new();
+            let mut chunk = [0; 256];
+            loop {
+                let read = reader.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                buf.extend_from_slice(&chunk[..read]);
+            }
+            assert_eq!(data, buf);
+        })
+        .await
+        .unwrap();
+    });
+}
+
+#[rstest]
+fn seek_from_end_with_unfinished_dynamic_content_length() {
+    SERVER_RT.block_on(async move {
+        let data = dynamic_test_data(1000);
+        // Smaller than the data so a regression fails the assertion below instead of waiting for
+        // bytes that never arrive.
+        let reported = 500;
+        let mut reader = StreamDownload::new::<DynamicLengthStream>(
+            DynamicLengthStream::new(&data, 100, reported, false),
+            MemoryStorageProvider,
+            // The stream never ends, so a prefetch larger than the data would never complete.
+            Settings::default().prefetch_bytes(0),
+        )
+        .await
+        .unwrap();
+
+        spawn_blocking(move || {
+            // The latest known value is still the reported one.
+            assert_eq!(Some(reported), reader.content_length());
+            let err = reader.seek(SeekFrom::End(0)).unwrap_err();
+            assert_eq!(io::ErrorKind::Unsupported, err.kind());
+        })
+        .await
+        .unwrap();
+    });
 }
 
 #[rstest]
